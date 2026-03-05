@@ -11,8 +11,20 @@
     margin: 0 2;
 }
 
-#pipeline-progress {
+#pipeline-progress-row {
+    height: auto;
     margin: 1 2;
+    align: center middle;
+}
+
+#pipeline-progress {
+    width: 1fr;
+}
+
+#pipeline-spinner {
+    width: 3;
+    height: 1;
+    margin-left: 1;
 }
 
 #pipeline-log {

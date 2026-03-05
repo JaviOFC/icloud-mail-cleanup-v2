@@ -10,6 +10,7 @@ from textual.widgets import Button, Footer, Header, ProgressBar, RichLog, Static
 from textual.worker import get_current_worker
 
 from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
 class ExecuteScreen(Screen):
@@ -33,7 +34,9 @@ class ExecuteScreen(Screen):
             with Horizontal(id="exec-buttons"):
                 yield Button("Dry Run", id="btn-dry", variant="primary")
                 yield Button("Execute for Real", id="btn-execute", variant="error")
-            yield ProgressBar(id="exec-progress", total=100, show_eta=False)
+            with Horizontal(id="exec-progress-row"):
+                yield ProgressBar(id="exec-progress", total=100, show_eta=False)
+                yield SpinnerWidget(id="exec-spinner")
             yield Static("Success: 0 | Errors: 0 | Skipped: 0", id="exec-stats")
             yield RichLog(id="exec-log", markup=True, auto_scroll=True, max_lines=500)
         yield Footer()
@@ -121,6 +124,9 @@ class ExecuteScreen(Screen):
         log_widget = self.query_one("#exec-log", RichLog)
         progress = self.query_one("#exec-progress", ProgressBar)
         stats_widget = self.query_one("#exec-stats", Static)
+
+        spinner = self.query_one("#exec-spinner", SpinnerWidget)
+        self.app.call_from_thread(spinner.start)
 
         mode = "DRY-RUN" if dry_run else "LIVE"
         self.app.call_from_thread(log_widget.write, f"[bold]Starting execution ({mode})...[/bold]")
@@ -235,7 +241,8 @@ class ExecuteScreen(Screen):
             f"Execution complete: {cumulative_success} messages processed",
         )
 
-        # Re-show buttons
+        # Stop spinner and re-show buttons
+        self.app.call_from_thread(spinner.stop)
         self.app.call_from_thread(self.query_one("#btn-dry", Button).set_class, False, "hidden")
         self.app.call_from_thread(self.query_one("#btn-execute", Button).set_class, False, "hidden")
 

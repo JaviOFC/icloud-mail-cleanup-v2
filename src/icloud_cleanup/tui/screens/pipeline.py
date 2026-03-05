@@ -13,6 +13,7 @@ from textual.worker import get_current_worker
 
 from icloud_cleanup.tui.widgets.pipeline_log import PipelineLogWidget
 from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
 class PipelineScreen(Screen):
@@ -29,7 +30,9 @@ class PipelineScreen(Screen):
         yield Header()
         with Vertical(id="pipeline-content"):
             yield Static("Pipeline: Ready", id="pipeline-status")
-            yield ProgressBar(id="pipeline-progress", total=3, show_eta=False)
+            with Horizontal(id="pipeline-progress-row"):
+                yield ProgressBar(id="pipeline-progress", total=3, show_eta=False)
+                yield SpinnerWidget(id="pipeline-spinner")
             yield PipelineLogWidget(id="pipeline-log")
             with Horizontal(id="pipeline-buttons"):
                 yield Button("Run Pipeline", id="btn-pipeline", variant="primary")
@@ -55,6 +58,8 @@ class PipelineScreen(Screen):
         progress = self.query_one("#pipeline-progress", ProgressBar)
         status = self.query_one("#pipeline-status", Static)
 
+        spinner = self.query_one("#pipeline-spinner", SpinnerWidget)
+        self.app.call_from_thread(spinner.start)
         self.app.call_from_thread(status.update, "Pipeline: Running...")
         self.app.call_from_thread(progress.update, total=3, progress=0)
 
@@ -196,6 +201,7 @@ class PipelineScreen(Screen):
             self.app.call_from_thread(status.update, "Pipeline: Error")
 
         finally:
+            self.app.call_from_thread(spinner.stop)
             self.app.call_from_thread(
                 self.query_one("#btn-pipeline", Button).__setattr__, "disabled", False
             )
