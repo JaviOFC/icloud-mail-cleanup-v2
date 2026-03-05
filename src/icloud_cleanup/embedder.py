@@ -44,16 +44,18 @@ def batch_embed(
     model_name: str,
     batch_size: int = 64,
     max_length: int = 512,
+    progress_callback: callable | None = None,
 ) -> np.ndarray:
     """Generate embeddings in GPU batches.
 
     Args:
         texts: Input texts to embed.
         model: MLX embedding model.
-        tokenizer: MLX tokenizer with batch_encode_plus.
+        tokenizer: MLX tokenizer.
         model_name: Model identifier -- prefix applied if "modernbert" in name.
         batch_size: Texts per GPU batch.
         max_length: Max token length for truncation.
+        progress_callback: Called with batch_size after each batch completes.
 
     Returns:
         (N, dim) numpy array of L2-normalized embeddings.
@@ -84,5 +86,7 @@ def batch_embed(
         mx.eval(outputs.text_embeds)
         batch_np = np.array(outputs.text_embeds)
         all_embeds.append(batch_np)
+        if progress_callback:
+            progress_callback(len(batch))
 
     return np.vstack(all_embeds)

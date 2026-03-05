@@ -202,6 +202,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         Progress,
         SpinnerColumn,
         TextColumn,
+        TimeElapsedColumn,
         TimeRemainingColumn,
     )
 
@@ -304,7 +305,14 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     model, tokenizer, model_name = load_embedding_model()
     console.print(f"  Model: [bold]{model_name}[/bold]")
 
-    embeddings = batch_embed(texts, model, tokenizer, model_name)
+    with Progress(SpinnerColumn(), TextColumn("{task.description}"),
+                   BarColumn(), MofNCompleteColumn(),
+                   TimeElapsedColumn(), console=console) as progress:
+        embed_task = progress.add_task("Embedding...", total=len(texts))
+        embeddings = batch_embed(
+            texts, model, tokenizer, model_name,
+            progress_callback=lambda n: progress.advance(embed_task, n),
+        )
     console.print(f"  Embeddings: [bold]{embeddings.shape}[/bold]\n")
 
     # Step 4: Cluster and label
