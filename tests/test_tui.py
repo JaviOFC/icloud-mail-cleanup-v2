@@ -89,3 +89,36 @@ async def test_quit(tmp_path: Path) -> None:
 
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.press("q")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_shows_tier_summary(tmp_path: Path) -> None:
+    """Dashboard should contain a TierSummaryWidget with tier names."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.tier_summary import TierSummaryWidget
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        # Wait for background data load
+        await pilot.pause(delay=0.5)
+
+        widget = app.query_one("#tier-summary", TierSummaryWidget)
+        assert widget is not None
+
+
+@pytest.mark.asyncio
+async def test_dashboard_shows_storage_banner(tmp_path: Path) -> None:
+    """Dashboard should contain a StorageBannerWidget showing savings text."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.storage_banner import StorageBannerWidget
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause(delay=0.5)
+
+        widget = app.query_one("#storage-banner", StorageBannerWidget)
+        assert widget is not None

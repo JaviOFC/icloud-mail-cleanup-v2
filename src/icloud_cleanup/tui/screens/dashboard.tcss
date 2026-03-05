@@ -1,0 +1,13 @@
+/* Dashboard screen layout */
+#dashboard-content {
+    height: 1fr;
+    padding: 1;
+}
+
+#pipeline-status {
+    dock: bottom;
+    height: 1;
+    text-align: center;
+    color: $text-muted;
+    margin: 0 2;
+}
