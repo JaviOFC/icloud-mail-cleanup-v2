@@ -166,6 +166,9 @@ def auto_triage(
             continue
 
         tier = next(iter(tiers))
+        # Skip same-tier resolution (review→review is noise)
+        if review_only and tier == Tier.REVIEW:
+            continue
         if not _check_protected_trash_safety(group, tier):
             continue
 
@@ -203,6 +206,9 @@ def auto_triage(
             continue
 
         tier = next(iter(tiers))
+        # Skip same-tier resolution (review→review is noise)
+        if review_only and tier == Tier.REVIEW:
+            continue
         if not _check_protected_trash_safety(group, tier):
             continue
 

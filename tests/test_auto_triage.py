@@ -200,9 +200,9 @@ class TestReviewOnlyFilter:
         sender_lookup = {1: "a@test.com", 2: "b@test.com", 3: "c@test.com"}
 
         result = auto_triage(items, sender_lookup, review_only=True)
-        # Only review items processed; trash item excluded from input
-        assert result.auto_resolved_count == 2
-        assert result.remaining_count == 0
+        # Review→review resolution is skipped (same-tier noise), items stay in remaining
+        assert result.auto_resolved_count == 0
+        assert result.remaining_count == 2
 
     def test_review_only_false_processes_all(self) -> None:
         items = [
@@ -324,13 +324,14 @@ class TestAutoTriageResult:
         assert result.remaining == []
 
     def test_cluster_count_in_result(self) -> None:
+        # Use non-review tiers so cluster unanimity resolves them (review→review is skipped)
         items = [
-            _make_classification(1, Tier.REVIEW, 0.92, cluster_id=1, cluster_label="a"),
-            _make_classification(2, Tier.REVIEW, 0.92, cluster_id=1, cluster_label="a"),
-            _make_classification(3, Tier.REVIEW, 0.88, cluster_id=2, cluster_label="b"),
-            _make_classification(4, Tier.REVIEW, 0.88, cluster_id=2, cluster_label="b"),
+            _make_classification(1, Tier.TRASH, 0.92, cluster_id=1, cluster_label="a"),
+            _make_classification(2, Tier.TRASH, 0.92, cluster_id=1, cluster_label="a"),
+            _make_classification(3, Tier.KEEP_HISTORICAL, 0.88, cluster_id=2, cluster_label="b"),
+            _make_classification(4, Tier.KEEP_HISTORICAL, 0.88, cluster_id=2, cluster_label="b"),
         ]
         sender_lookup = {i: f"s{i}@test.com" for i in range(1, 5)}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_cluster_count == 2
