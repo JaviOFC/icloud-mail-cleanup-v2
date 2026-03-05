@@ -1,0 +1,154 @@
+"""Database access layer for reading the Envelope Index."""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+from icloud_cleanup.models import Message
+
+ENVELOPE_INDEX = Path.home() / "Library/Mail/V10/MailData/Envelope Index"
+ICLOUD_UUID = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+
+
+def open_db(path: Path | None = None) -> sqlite3.Connection:
+    """Open the Envelope Index in URI read-only mode.
+
+    Uses the default system path if none provided.
+    """
+    target = path or ENVELOPE_INDEX
+    uri = f"file:{target}?mode=ro"
+    conn = sqlite3.connect(uri, uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def scan_messages(conn: sqlite3.Connection) -> list[Message]:
+    """Bulk-extract all iCloud messages as typed Message objects."""
+    query = """
+    SELECT
+        m.ROWID as rowid,
+        m.message_id,
+        m.conversation_id,
+        m.flags,
+        m.read,
+        m.flagged,
+        m.deleted,
+        m.size,
+        m.date_received,
+        m.list_id_hash,
+        m.unsubscribe_type,
+        m.automated_conversation,
+        COALESCE(a.address, '') as sender_address,
+        COALESCE(s.subject, '') as subject,
+        mb.url as mailbox_url,
+        mgd.model_category,
+        mgd.model_high_impact
+    FROM messages m
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    LEFT JOIN addresses a ON m.sender = a.ROWID
+    LEFT JOIN subjects s ON m.subject = s.ROWID
+    LEFT JOIN message_global_data mgd ON m.message_id = mgd.message_id
+    WHERE mb.url LIKE ?
+    ORDER BY m.date_received DESC
+    """
+    cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/%",))
+    return [
+        Message(
+            rowid=row["rowid"],
+            message_id=row["message_id"],
+            conversation_id=row["conversation_id"],
+            flags=row["flags"],
+            read=row["read"],
+            flagged=row["flagged"],
+            deleted=row["deleted"],
+            size=row["size"],
+            date_received=row["date_received"],
+            sender_address=row["sender_address"],
+            subject=row["subject"],
+            mailbox_url=row["mailbox_url"],
+            list_id_hash=row["list_id_hash"],
+            unsubscribe_type=row["unsubscribe_type"],
+            automated_conversation=row["automated_conversation"],
+            model_category=row["model_category"],
+            model_high_impact=row["model_high_impact"],
+        )
+        for row in cursor
+    ]
+
+
+def get_sender_stats(conn: sqlite3.Connection) -> dict[str, dict]:
+    """Aggregate sender volume statistics from iCloud inbox mailboxes.
+
+    Groups by lowercase address, excludes Sent/Drafts.
+    Returns dict keyed by lowercase address with count, total_size, min_date, max_date.
+    """
+    query = """
+    SELECT
+        LOWER(a.address) as address,
+        COUNT(*) as count,
+        SUM(m.size) as total_size,
+        MIN(m.date_received) as min_date,
+        MAX(m.date_received) as max_date
+    FROM messages m
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    LEFT JOIN addresses a ON m.sender = a.ROWID
+    WHERE mb.url LIKE ?
+      AND mb.url NOT LIKE '%/Sent%'
+      AND mb.url NOT LIKE '%/Drafts%'
+      AND a.address IS NOT NULL
+    GROUP BY LOWER(a.address)
+    """
+    cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/%",))
+    return {
+        row["address"]: {
+            "count": row["count"],
+            "total_size": row["total_size"],
+            "min_date": row["min_date"],
+            "max_date": row["max_date"],
+        }
+        for row in cursor
+    }
+
+
+def get_sent_recipients(conn: sqlite3.Connection) -> dict[str, dict]:
+    """Extract recipients from iCloud Sent mailbox.
+
+    Returns dict keyed by lowercase address with times_sent_to and last_sent_to.
+    """
+    query = """
+    SELECT
+        LOWER(a.address) as address,
+        COUNT(*) as times_sent_to,
+        MAX(m.date_received) as last_sent_to
+    FROM messages m
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    JOIN recipients r ON r.message = m.ROWID
+    JOIN addresses a ON r.address = a.ROWID
+    WHERE mb.url LIKE ?
+    GROUP BY LOWER(a.address)
+    """
+    cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/Sent%",))
+    return {
+        row["address"]: {
+            "times_sent_to": row["times_sent_to"],
+            "last_sent_to": row["last_sent_to"],
+        }
+        for row in cursor
+    }
+
+
+def get_replied_conversation_ids(conn: sqlite3.Connection) -> set[int]:
+    """Get conversation IDs that have messages in the Sent mailbox.
+
+    Excludes conversation_id = 0 (unthreaded messages).
+    """
+    query = """
+    SELECT DISTINCT conversation_id
+    FROM messages m
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    WHERE mb.url LIKE ?
+      AND conversation_id > 0
+    """
+    cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/Sent%",))
+    return {row["conversation_id"] for row in cursor}
