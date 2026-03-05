@@ -129,12 +129,15 @@ class TestGenerateApplescript:
         assert '"Custom Trash"' in script
 
     def test_no_delete_command(self):
-        """AppleScript must use 'set mailbox of', never 'delete'."""
+        """AppleScript must use 'set mailbox of', never the 'delete' command."""
         script = generate_applescript(
             rowid=100,
             source_mailbox='mailbox "INBOX" of account "iCloud"',
         )
-        assert "delete" not in script.lower()
+        # "Deleted Messages" is the mailbox name, not the delete command
+        # Check that no line starts with "delete" as an AppleScript command
+        lines = [line.strip().lower() for line in script.splitlines()]
+        assert not any(line.startswith("delete ") for line in lines)
 
 
 class TestGenerateRestoreScript:
