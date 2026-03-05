@@ -1,0 +1,41 @@
+/* Review screen layout */
+#review-split {
+    height: 1fr;
+}
+
+#left-panel {
+    width: 2fr;
+    min-width: 40;
+}
+
+#right-panel {
+    width: 3fr;
+    min-width: 50;
+}
+
+.section-header {
+    height: 1;
+    text-style: bold;
+    padding: 0 1;
+    background: $panel;
+}
+
+#bulk-actions {
+    height: auto;
+    dock: bottom;
+    padding: 0 1;
+}
+
+#bulk-actions Button {
+    margin: 0 1;
+}
+
+#api-status {
+    height: auto;
+    padding: 0 2;
+    color: $text-muted;
+}
+
+#propagation-tab {
+    height: 1fr;
+}

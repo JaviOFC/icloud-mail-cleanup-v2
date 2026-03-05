@@ -1,10 +1,12 @@
-"""TUI screen definitions -- placeholders for screens not yet implemented."""
+"""TUI screen definitions."""
 
 from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
+
+from icloud_cleanup.tui.screens.review import ReviewScreen
 
 
 class PlaceholderScreen(Screen):
@@ -30,13 +32,6 @@ class PlaceholderScreen(Screen):
         yield Footer()
 
 
-class ReviewScreen(PlaceholderScreen):
-    """Placeholder -- will be replaced in plan 04-02."""
-
-    def __init__(self) -> None:
-        super().__init__("Review -- Coming soon...")
-
-
 class ExecuteScreen(PlaceholderScreen):
     """Placeholder -- will be replaced in plan 04-03."""
 
@@ -51,5 +46,4 @@ class PipelineScreen(PlaceholderScreen):
         super().__init__("Pipeline -- Coming soon...")
 
 
-# Re-export for convenience. DashboardScreen added after task 2.
 __all__ = ["ReviewScreen", "ExecuteScreen", "PipelineScreen"]

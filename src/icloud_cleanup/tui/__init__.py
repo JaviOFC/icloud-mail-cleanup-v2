@@ -40,6 +40,8 @@ class CleanupApp(App):
     report_data: dict[str, Any] | None = None
     classifications: dict[int, Any] | None = None
     session: Any | None = None
+    messages: list[Any] | None = None
+    sender_lookup: dict[int, str] | None = None
 
     def __init__(
         self,
@@ -107,6 +109,8 @@ class CleanupApp(App):
                 for c in classifications_list
             ]
 
+        self.messages = messages
+        self.sender_lookup = {m.message_id: m.sender_address for m in messages}
         self.report_data = build_report_data(classifications_list, messages)
 
         if self.session_path:
