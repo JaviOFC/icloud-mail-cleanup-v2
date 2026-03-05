@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Scanning + Metadata Classification** - Read Envelope Index, score contacts and behavior, classify emails using metadata signals only
 - [x] **Phase 2: Content Analysis + Full Classification** - Parse .emlx bodies, generate MLX embeddings, cluster semantically, upgrade classification with content signals
 - [x] **Phase 3: Report, Review + Safe Execution** - Generate cleanup report, interactive terminal walkthrough, execute approved deletions with safety guarantees
-- [ ] **Phase 4: Interface & GUI (TUI)** - Textual-based terminal application for interactive review, execution, and pipeline management
+- [x] **Phase 4: Interface & GUI (TUI)** - Textual-based terminal application for interactive review, execution, and pipeline management
 
 ## Phase Details
 
@@ -85,8 +85,8 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md -- App shell, dependencies, Dashboard screen with tier summary and storage widgets, CLI tui subcommand, test scaffold
 - [x] 04-02-PLAN.md -- Review screen with cluster list + detail split, multi-select bulk actions, auto-triage, propagation toasts, session persistence
-- [ ] 04-03-PLAN.md -- Execute screen with dry-run/live progress and Pipeline screen with background workers and log output
-- [ ] 04-04-PLAN.md -- Help overlay, theme polish, and end-to-end human verification checkpoint
+- [x] 04-03-PLAN.md -- Execute screen with dry-run/live progress and Pipeline screen with background workers and log output
+- [x] 04-04-PLAN.md -- Help overlay, theme polish, and end-to-end human verification checkpoint
 
 ## Progress
 
@@ -98,4 +98,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
 | 2. Content Analysis + Full Classification | 3/3 | Complete | 2026-03-05 |
 | 3. Report, Review + Safe Execution | 4/4 | Complete | 2026-03-05 |
-| 4. Interface & GUI (TUI) | 3/4 | In Progress | - |
+| 4. Interface & GUI (TUI) | 4/4 | Complete | 2026-03-05 |

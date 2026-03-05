@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Review, Execute, and Pipeline screens complete. All 4 core screens built."
-stopped_at: Completed 04-02-PLAN.md and 04-03-PLAN.md (wave 2)
-last_updated: "2026-03-05T20:41:29Z"
-last_activity: "2026-03-05 - Completed wave 2: plans 04-02 and 04-03"
+status: "All 4 phases complete. v1.0 milestone achieved -- full TUI with help, onboarding, UX polish."
+stopped_at: "Completed 04-04-PLAN.md (final plan)"
+last_updated: "2026-03-05T21:56:26Z"
+last_activity: "2026-03-05 - Completed 04-04: help overlay, UX polish, E2E verification fixes"
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 14
-  completed_plans: 14
+  completed_phases: 4
+  total_plans: 15
+  completed_plans: 15
   percent: 100
 ---
 
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Aggressively eliminate junk mail while guaranteeing zero false positives on personally meaningful emails
-**Current focus:** Phase 4 (Interface & GUI) in progress -- building Textual TUI.
+**Current focus:** All phases complete. v1.0 milestone achieved.
 
 ## Current Position
 
-Phase: 4 of 4 (Interface & GUI)
-Plan: 3 of 4 in current phase -- Review, Execute & Pipeline screens complete
-Status: Review screen (cluster list/detail split, multi-select, propagation tab, auto-triage, API fallback), Execute screen (dry-run default, live progress), and Pipeline screen (scan/classify/analyze worker) implemented.
-Last activity: 2026-03-05 - Completed wave 2: plans 04-02 and 04-03
+Phase: 4 of 4 (Interface & GUI) -- COMPLETE
+Plan: 4 of 4 in current phase -- All plans complete
+Status: Full TUI with help overlay, welcome onboarding, per-screen help, active footer, spinners, and all UX fixes.
+Last activity: 2026-03-05 - Completed 04-04: help overlay, UX polish, E2E verification fixes
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 4min
-- Total execution time: 0.95 hours
+- Total plans completed: 15
+- Average duration: 5min
+- Total execution time: 1.15 hours
 
 **By Phase:**
 
@@ -46,11 +46,11 @@ Progress: [██████████] 100%
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
 | 3 | 3 | 16min | 5min |
-| 4 | 3 | 22min | 7min |
+| 4 | 4 | 34min | 9min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (5min), 03-03 (5min), 04-01 (6min), 04-02 (9min), 04-03 (7min)
-- Trend: Steady
+- Last 5 plans: 03-03 (5min), 04-01 (6min), 04-02 (9min), 04-03 (7min), 04-04 (12min)
+- Trend: Slightly increasing (UX polish plans take longer due to human checkpoint feedback)
 
 *Updated after each plan completion*
 
@@ -106,6 +106,11 @@ Recent decisions affecting current work:
 - [04-03]: app.call_from_thread() used for thread-safe widget updates (Screen lacks this method in Textual 1.0.0)
 - [04-03]: Pipeline step 3 (MLX content analysis) degrades gracefully if dependencies unavailable
 - [04-03]: Execute screen chunks to batch_size=100 for progress granularity
+- [04-04]: DismissibleOverlay as reusable ModalScreen base -- dismisses on any keypress
+- [04-04]: Dashboard skips per-screen help when welcome overlay already shown
+- [04-04]: ActiveFooter custom widget replaces default Footer for active tab highlighting
+- [04-04]: SpinnerWidget uses braille dot frames at 100ms for smooth animation
+- [04-04]: Review buttons shortened + CSS overflow-x: auto for narrow terminals
 
 ### Roadmap Evolution
 
@@ -129,6 +134,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T20:41:29Z
-Stopped at: Completed wave 2 (04-02 and 04-03)
-Resume file: .planning/phases/04-interface-gui/04-03-SUMMARY.md
+Last session: 2026-03-05T21:56:26Z
+Stopped at: Completed 04-04-PLAN.md (final plan -- v1.0 milestone complete)
+Resume file: .planning/phases/04-interface-gui/04-04-SUMMARY.md
