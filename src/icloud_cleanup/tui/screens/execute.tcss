@@ -1,0 +1,43 @@
+/* Execute screen layout */
+#execute-content {
+    height: 1fr;
+    padding: 1;
+}
+
+#exec-summary {
+    text-align: center;
+    text-style: bold;
+    height: 1;
+    margin: 0 2;
+}
+
+#exec-buttons {
+    align: center middle;
+    height: 3;
+    margin: 1 0;
+}
+
+#exec-buttons Button {
+    margin: 0 2;
+}
+
+#exec-progress {
+    margin: 0 2;
+}
+
+#exec-stats {
+    text-align: center;
+    height: 1;
+    margin: 0 2;
+    color: $text-muted;
+}
+
+#exec-log {
+    height: 1fr;
+    margin: 1 2;
+    border: solid $panel;
+}
+
+.hidden {
+    display: none;
+}

@@ -37,11 +37,7 @@ class ReviewScreen(PlaceholderScreen):
         super().__init__("Review -- Coming soon...")
 
 
-class ExecuteScreen(PlaceholderScreen):
-    """Placeholder -- will be replaced in plan 04-03."""
-
-    def __init__(self) -> None:
-        super().__init__("Execute -- Coming soon...")
+from icloud_cleanup.tui.screens.execute import ExecuteScreen as ExecuteScreen  # noqa: E501
 
 
 class PipelineScreen(PlaceholderScreen):
