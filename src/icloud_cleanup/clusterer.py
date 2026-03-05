@@ -23,8 +23,8 @@ _KEEP_TIERS = {Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL}
 
 def cluster_embeddings(
     embeddings: np.ndarray,
-    min_cluster_size: int = 100,
-    min_samples: int = 20,
+    min_cluster_size: int = 25,
+    min_samples: int = 10,
 ) -> np.ndarray:
     """Cluster embedding vectors using HDBSCAN with cosine metric.
 

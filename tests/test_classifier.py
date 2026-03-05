@@ -819,6 +819,20 @@ class TestReclassRules:
         )
         assert result.tier == Tier.REVIEW
 
+    def test_trash_neutral_content_stays_trash(self):
+        """Trash + neutral content_score (0.5) -> stays Trash (not enough signal to promote)."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.TRASH, confidence=0.2)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 400 * 86400)
+        profile = _make_profile(reply_rate=0.0, is_bidirectional=False, times_sent_to=0)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.5,
+            cluster_id=-1, cluster_label="noise", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier == Tier.TRASH
+
     def test_trash_high_content_promotes(self):
         """Trash + high content_score (0.8) -> promoted to Review or Keep (safety net)."""
         from icloud_cleanup.classifier import reclassify_with_content

@@ -266,14 +266,17 @@ def reclassify_with_content(
         # Keep tiers are locked -- never demoted
         new_tier = original_tier
     elif original_tier == Tier.TRASH:
-        # Trash can be promoted if content strongly disagrees
-        # Re-evaluate with fused confidence -- only promote, never stay trash
-        # if fused says keep/review
-        protected = classification.protected
-        overridden = check_protection_override(profile) if protected else False
-        candidate_tier = assign_tier(fused, protected, overridden, profile, message)
-        if candidate_tier in (Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL, Tier.REVIEW):
-            new_tier = candidate_tier
+        # Trash promotion is conservative: only promote when content_score
+        # shows a clear keep signal (>0.65), not just neutral noise (0.5).
+        # A neutral content score should NOT override metadata's trash decision.
+        if content_score > 0.65:
+            protected = classification.protected
+            overridden = check_protection_override(profile) if protected else False
+            candidate_tier = assign_tier(fused, protected, overridden, profile, message)
+            if candidate_tier in (Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL, Tier.REVIEW):
+                new_tier = candidate_tier
+            else:
+                new_tier = Tier.TRASH
         else:
             new_tier = Tier.TRASH
     else:
