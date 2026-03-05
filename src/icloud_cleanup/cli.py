@@ -1,4 +1,4 @@
-"""CLI entry point with scan/classify/report subcommands."""
+"""CLI entry point with scan/classify/report/review/execute subcommands."""
 
 from __future__ import annotations
 
@@ -103,7 +103,89 @@ def create_parser() -> argparse.ArgumentParser:
 
     # report
     report_parser = subparsers.add_parser("report", help="Display classification report")
+    report_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="export_json",
+        help="Export report as JSON",
+    )
+    report_parser.add_argument(
+        "--markdown",
+        action="store_true",
+        dest="export_markdown",
+        help="Export report as Markdown",
+    )
+    report_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output directory for exported reports",
+    )
+    report_parser.add_argument(
+        "--format",
+        choices=["terminal", "json", "markdown", "all"],
+        default="terminal",
+        dest="report_format",
+        help="Report format (default: terminal)",
+    )
     report_parser.set_defaults(func=cmd_report)
+
+    # review
+    review_parser = subparsers.add_parser(
+        "review", help="Interactive review of classified emails",
+    )
+    review_parser.add_argument(
+        "--session",
+        type=Path,
+        default=None,
+        help="Custom review session file path",
+    )
+    review_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume existing review session",
+    )
+    review_parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Start fresh, discard existing session",
+    )
+    review_parser.set_defaults(func=cmd_review)
+
+    # execute
+    execute_parser = subparsers.add_parser(
+        "execute", help="Execute approved deletions",
+    )
+    execute_parser.add_argument(
+        "--execute",
+        action="store_true",
+        dest="do_execute",
+        help="Actually perform deletions (default: dry-run)",
+    )
+    execute_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="Messages per batch (default: 100)",
+    )
+    execute_parser.add_argument(
+        "--batch-pause",
+        type=float,
+        default=2.0,
+        help="Seconds between batches (default: 2.0)",
+    )
+    execute_parser.add_argument(
+        "--restore",
+        action="store_true",
+        help="Restore previously deleted messages",
+    )
+    execute_parser.add_argument(
+        "--action-log",
+        type=Path,
+        default=None,
+        help="Custom action log path (default: ~/.icloud-cleanup/action_log.db)",
+    )
+    execute_parser.set_defaults(func=cmd_execute)
 
     return parser
 
@@ -477,7 +559,9 @@ def _debug_sender_scores(
 
 
 def cmd_report(args: argparse.Namespace) -> None:
-    """Execute the report subcommand: display checkpoint results."""
+    """Execute the report subcommand: display checkpoint results with optional export."""
+    from icloud_cleanup.report import generate_report
+
     checkpoint = load_checkpoint(args.checkpoint)
     if not checkpoint:
         console.print("[red]No checkpoint found. Run 'classify' first.[/red]")
@@ -485,7 +569,6 @@ def cmd_report(args: argparse.Namespace) -> None:
 
     classifications = list(checkpoint.values())
 
-    # Reload messages for sender lookup in top senders display
     conn = open_db(args.db)
     try:
         messages = scan_messages(conn)
@@ -494,9 +577,305 @@ def cmd_report(args: argparse.Namespace) -> None:
 
     console.print(f"[bold]Loaded {len(classifications):,} classifications[/bold]\n")
 
-    display_tier_summary(classifications, console=console)
-    console.print()
-    display_top_senders(classifications, messages, console=console)
+    # Determine effective format from flags
+    fmt = args.report_format
+    if args.export_json and fmt == "terminal":
+        fmt = "json"
+    elif args.export_markdown and fmt == "terminal":
+        fmt = "markdown"
+
+    output_dir = args.output or (Path.home() / ".icloud-cleanup" / "reports")
+
+    if fmt == "terminal":
+        display_tier_summary(classifications, console=console)
+        console.print()
+        display_top_senders(classifications, messages, console=console)
+    else:
+        result = generate_report(classifications, messages, output_dir, format=fmt)
+        for fmt_name, path in result.items():
+            if path != "rendered":
+                console.print(f"[green]Exported {fmt_name}:[/green] {path}")
+
+
+def cmd_review(args: argparse.Namespace) -> None:
+    """Execute the review subcommand: interactive review of classified emails."""
+    import questionary
+
+    from icloud_cleanup.auto_triage import auto_triage
+    from icloud_cleanup.review import (
+        ReviewSession,
+        get_session_path,
+        load_session,
+        run_review,
+        save_session,
+    )
+
+    checkpoint = load_checkpoint(args.checkpoint)
+    if not checkpoint:
+        console.print("[red]No checkpoint found. Run 'classify' first.[/red]")
+        sys.exit(1)
+
+    classifications = list(checkpoint.values())
+
+    conn = open_db(args.db)
+    try:
+        messages = scan_messages(conn)
+    finally:
+        conn.close()
+
+    msg_index: dict[int, Message] = {m.message_id: m for m in messages}
+    sender_lookup: dict[int, str] = {m.message_id: m.sender_address for m in messages}
+
+    console.print(f"[bold]Loaded {len(classifications):,} classifications[/bold]\n")
+
+    # Session management
+    session_path = args.session or get_session_path()
+
+    if args.reset and session_path.exists():
+        session_path.unlink()
+        console.print("[yellow]Previous session discarded.[/yellow]\n")
+
+    session = None
+    if args.resume or (not args.reset and session_path.exists()):
+        session = load_session(session_path)
+        if session:
+            console.print(
+                f"[green]Resuming session[/green] {session.session_id} "
+                f"({len(session.decisions)} clusters reviewed)\n"
+            )
+
+    if session is None:
+        session = ReviewSession(
+            session_id=f"review_{time.strftime('%Y%m%d_%H%M%S')}",
+            started_at=int(time.time()),
+            last_updated=int(time.time()),
+        )
+
+    # Auto-triage pass on Review-tier items
+    console.print("[bold]Running auto-triage...[/bold]")
+    triage_result = auto_triage(classifications, sender_lookup)
+
+    console.print(
+        f"  Auto-resolved: [green]{triage_result.auto_resolved_count:,}[/green] emails "
+        f"across [green]{triage_result.auto_resolved_cluster_count}[/green] groups\n"
+        f"  Remaining for review: [yellow]{triage_result.remaining_count:,}[/yellow] emails "
+        f"in [yellow]{triage_result.remaining_cluster_count}[/yellow] clusters\n"
+    )
+
+    session.auto_triage_summary = {
+        "auto_resolved_count": triage_result.auto_resolved_count,
+        "auto_resolved_cluster_count": triage_result.auto_resolved_cluster_count,
+        "remaining_count": triage_result.remaining_count,
+        "remaining_cluster_count": triage_result.remaining_cluster_count,
+    }
+
+    # Offer inspection of auto-resolved items
+    if triage_result.auto_resolved:
+        inspect = questionary.confirm(
+            "Inspect auto-resolved items?", default=False,
+        ).ask()
+        if inspect:
+            for resolution in triage_result.auto_resolved:
+                console.print(
+                    f"  {resolution.reason} "
+                    f"({len(resolution.message_ids)} emails, "
+                    f"avg confidence {resolution.avg_confidence:.2f})"
+                )
+
+    # Run interactive review on remaining items
+    if triage_result.remaining:
+        session = run_review(
+            triage_result.remaining,
+            messages,
+            session,
+            console=console,
+            session_path=session_path,
+        )
+
+    # Summary
+    approve_count = sum(
+        1 for d in session.decisions.values() if d.get("action") == "approve"
+    )
+    skip_count = sum(
+        1 for d in session.decisions.values() if d.get("action") == "skip"
+    )
+    reclassify_count = sum(
+        1 for d in session.decisions.values() if d.get("action") == "reclassify"
+    )
+    console.print(f"\n[bold]Review summary:[/bold]")
+    console.print(f"  Approved for deletion: [red]{approve_count}[/red] clusters")
+    console.print(f"  Skipped: [green]{skip_count}[/green] clusters")
+    console.print(f"  Reclassified: [yellow]{reclassify_count}[/yellow] clusters")
+
+    # Suggest API fallback for remaining ambiguous items
+    remaining_ambiguous = [
+        c for c in triage_result.remaining
+        if c.tier == Tier.REVIEW
+        and str(c.message_id) not in session.individual_decisions
+        and all(
+            _cluster_key_for_cls(c) != k
+            for k in session.decisions
+            if session.decisions[k].get("action") in ("approve", "reclassify")
+        )
+    ]
+
+    if remaining_ambiguous:
+        from icloud_cleanup.api_fallback import estimate_api_cost
+
+        cost = estimate_api_cost(len(remaining_ambiguous))
+        console.print(
+            f"\n[bold]{len(remaining_ambiguous)}[/bold] emails remain ambiguous. "
+            f"Claude API analysis estimated cost: [bold]${cost['estimated_cost_usd']:.4f}[/bold]"
+        )
+        use_api = questionary.confirm(
+            "Run Claude API analysis on ambiguous emails?", default=False,
+        ).ask()
+        if use_api:
+            from icloud_cleanup.api_fallback import (
+                build_metadata_payload,
+                classify_ambiguous_batch,
+                integrate_api_results,
+            )
+
+            payloads = []
+            for c in remaining_ambiguous:
+                msg = msg_index.get(c.message_id)
+                if msg is None:
+                    continue
+                cluster_examples = [
+                    msg_index[oc.message_id].subject
+                    for oc in classifications
+                    if oc.cluster_id == c.cluster_id
+                    and oc.message_id in msg_index
+                ][:5]
+                payload = build_metadata_payload(c, msg, cluster_examples)
+                payload["_message_id"] = c.message_id
+                payloads.append(payload)
+
+            if payloads:
+                console.print(f"Submitting {len(payloads)} emails to Claude API...")
+                try:
+                    batch = classify_ambiguous_batch(payloads)
+                    console.print(f"Batch submitted: {batch.id}")
+                    console.print(
+                        "[yellow]Batch processing is async. "
+                        "Check results later and re-run review.[/yellow]"
+                    )
+                except Exception as e:
+                    console.print(f"[red]API error: {e}[/red]")
+
+    save_session(session, session_path)
+    console.print(f"\nSession saved: [bold]{session_path}[/bold]")
+
+
+def _cluster_key_for_cls(c: Classification) -> str:
+    """Normalize cluster label for lookup."""
+    if c.cluster_id is None or c.cluster_id == -1:
+        return "Unclustered"
+    return c.cluster_label or f"cluster_{c.cluster_id}"
+
+
+def cmd_execute(args: argparse.Namespace) -> None:
+    """Execute the execute subcommand: carry out approved deletions."""
+    from icloud_cleanup.executor import ActionLog, execute_deletions, restore_from_log
+    from icloud_cleanup.review import get_session_path, load_session
+
+    # Load review session
+    session_path = get_session_path()
+    session = load_session(session_path)
+    if session is None and not args.restore:
+        console.print("[red]No review session found. Run 'review' first.[/red]")
+        sys.exit(1)
+
+    action_log_path = args.action_log or (Path.home() / ".icloud-cleanup" / "action_log.db")
+    action_log = ActionLog(action_log_path)
+
+    try:
+        if args.restore:
+            console.print("[bold]Restoring previously deleted messages...[/bold]\n")
+            result = restore_from_log(
+                action_log,
+                dry_run=not args.do_execute,
+                batch_size=args.batch_size,
+                batch_pause=args.batch_pause,
+            )
+            console.print(f"  Restored: [green]{result['success_count']}[/green]")
+            console.print(f"  Errors: [red]{result['error_count']}[/red]")
+            if not args.do_execute:
+                console.print(
+                    "\n[yellow]Dry-run mode. Run with --execute to carry out restores.[/yellow]"
+                )
+            return
+
+        # Collect approved message IDs from session
+        checkpoint = load_checkpoint(args.checkpoint)
+        if not checkpoint:
+            console.print("[red]No checkpoint found.[/red]")
+            sys.exit(1)
+
+        approved_ids: set[int] = set()
+
+        # From cluster-level approve decisions
+        all_classifications = list(checkpoint.values())
+        for cluster_key, decision in session.decisions.items():
+            if decision.get("action") == "approve":
+                for c in all_classifications:
+                    if _cluster_key_for_cls(c) == cluster_key:
+                        approved_ids.add(c.message_id)
+
+        # From individual decisions (split, inspect, propagation)
+        for mid_str, decision in session.individual_decisions.items():
+            if decision.get("action") == "approve":
+                approved_ids.add(int(mid_str))
+
+        if not approved_ids:
+            console.print("[yellow]No approved items to execute.[/yellow]")
+            return
+
+        # Load messages for approved items
+        conn = open_db(args.db)
+        try:
+            messages = scan_messages(conn)
+        finally:
+            conn.close()
+
+        approved_messages = [m for m in messages if m.message_id in approved_ids]
+        approved_classifications = {
+            c.message_id: c
+            for c in all_classifications
+            if c.message_id in approved_ids
+        }
+
+        dry_run = not args.do_execute
+        mode_str = "[yellow]DRY-RUN[/yellow]" if dry_run else "[red]LIVE[/red]"
+        console.print(f"[bold]Executing deletions ({mode_str})...[/bold]")
+        console.print(f"  Approved: [bold]{len(approved_messages)}[/bold] messages\n")
+
+        result = execute_deletions(
+            approved_messages,
+            approved_classifications,
+            action_log,
+            dry_run=dry_run,
+            batch_size=args.batch_size,
+            batch_pause=args.batch_pause,
+        )
+
+        console.print(f"\n[bold]Execution results:[/bold]")
+        console.print(f"  Moved to trash: [green]{result['success_count']}[/green]")
+        console.print(f"  Errors: [red]{result['error_count']}[/red]")
+        console.print(f"  Skipped (protected): [yellow]{result['skipped_protected']}[/yellow]")
+
+        if result["errors"]:
+            console.print("\n[red]Errors:[/red]")
+            for err in result["errors"][:10]:
+                console.print(f"  {err}")
+
+        if dry_run:
+            console.print(
+                "\n[yellow]Dry-run mode. Run with --execute to carry out deletions.[/yellow]"
+            )
+    finally:
+        action_log.close()
 
 
 def main() -> None:
