@@ -261,44 +261,62 @@ def cmd_analyze(args: argparse.Namespace) -> None:
     emlx_lookup = build_emlx_lookup(mail_dir, ICLOUD_UUID)
     console.print(f"  Found [bold]{len(emlx_lookup):,}[/bold] .emlx files on disk\n")
 
-    # Build ordered list of (message_id, text, content_source) aligned with checkpoint
+    # Build work items: (msg_id, emlx_path_or_None, subject)
+    work_items: list[tuple[int, Path | None, str]] = []
+    for msg_id, cls in existing.items():
+        msg = msg_by_id.get(msg_id)
+        if msg is None:
+            continue
+        emlx_path = emlx_lookup.get(msg.rowid)
+        work_items.append((msg_id, emlx_path, msg.subject))
+
+    # Parallel body extraction using multiprocessing (6 workers on M1 Max)
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    def _extract_body(item: tuple) -> tuple[int, str, str]:
+        """Worker: parse emlx body, return (msg_id, text, source)."""
+        msg_id, emlx_path, subject = item
+        body_text = None
+        if emlx_path is not None:
+            body_text = parse_emlx_body(emlx_path)
+        if body_text:
+            return (msg_id, body_text, "body")
+        return (msg_id, subject, "subject_only")
+
     ordered_msg_ids: list[int] = []
     texts: list[str] = []
     content_sources: list[str] = []
 
+    n_workers = min(6, len(work_items))
     with Progress(
         SpinnerColumn(),
         TextColumn("[bold]{task.description}"),
         BarColumn(),
         MofNCompleteColumn(),
-        TimeRemainingColumn(),
+        TimeElapsedColumn(),
+        console=console,
     ) as progress:
-        task = progress.add_task("Parsing bodies...", total=len(existing))
-        for msg_id, cls in existing.items():
-            msg = msg_by_id.get(msg_id)
-            if msg is None:
-                # No matching message in DB -- skip
+        task = progress.add_task("Parsing bodies...", total=len(work_items))
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            futures = {pool.submit(_extract_body, item): item for item in work_items}
+            results_by_id: dict[int, tuple[str, str]] = {}
+            for future in as_completed(futures):
+                msg_id, text, source = future.result()
+                results_by_id[msg_id] = (text, source)
                 progress.advance(task)
-                continue
 
-            body_text = None
-            emlx_path = emlx_lookup.get(msg.rowid)
-            if emlx_path is not None:
-                body_text = parse_emlx_body(emlx_path)
-
-            if body_text:
-                texts.append(body_text)
-                content_sources.append("body")
-            else:
-                texts.append(msg.subject)
-                content_sources.append("subject_only")
-            ordered_msg_ids.append(msg_id)
-            progress.advance(task)
+    # Preserve original checkpoint order
+    for msg_id, _, _ in work_items:
+        text, source = results_by_id[msg_id]
+        ordered_msg_ids.append(msg_id)
+        texts.append(text)
+        content_sources.append(source)
 
     body_count = sum(1 for s in content_sources if s == "body")
     subj_count = sum(1 for s in content_sources if s == "subject_only")
     console.print(f"  Parsed: [bold]{body_count:,}[/bold] bodies, "
-                  f"[bold]{subj_count:,}[/bold] subject-only fallbacks\n")
+                  f"[bold]{subj_count:,}[/bold] subject-only fallbacks "
+                  f"({n_workers} workers)\n")
 
     # Step 3: Generate embeddings
     console.print("[bold]Step 3: Generating embeddings (MLX GPU)...[/bold]")
@@ -311,6 +329,7 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         embed_task = progress.add_task("Embedding...", total=len(texts))
         embeddings = batch_embed(
             texts, model, tokenizer, model_name,
+            batch_size=256,
             progress_callback=lambda n: progress.advance(embed_task, n),
         )
     console.print(f"  Embeddings: [bold]{embeddings.shape}[/bold]\n")

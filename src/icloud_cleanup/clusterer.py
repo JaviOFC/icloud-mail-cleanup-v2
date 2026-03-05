@@ -47,6 +47,7 @@ def cluster_embeddings(
         min_samples=min_samples,
         metric="cosine",
         cluster_selection_method="eom",
+        n_jobs=-1,
     )
     labels = clusterer.fit_predict(embeddings)
 
