@@ -12,8 +12,10 @@ from statistics import mean
 
 from icloud_cleanup.models import Classification, Tier
 
-CLUSTER_CONFIDENCE_THRESHOLD = 0.85
-SENDER_CONFIDENCE_THRESHOLD = 0.80
+CLUSTER_CONFIDENCE_THRESHOLD = 0.60
+SENDER_CONFIDENCE_THRESHOLD = 0.55
+CROSS_TIER_DOMINANCE_RATIO = 0.75
+CROSS_TIER_MIN_EVIDENCE = 3
 
 
 @dataclass
@@ -95,6 +97,58 @@ def auto_triage(
 
     resolved: list[AutoResolution] = []
     resolved_ids: set[int] = set()
+
+    # Pass 0: Cross-tier sender resolution
+    # For senders with review-tier emails, check their non-review emails.
+    # If >75% of non-review emails are in one tier with 3+ emails,
+    # auto-resolve the review emails to that dominant tier.
+    if review_only:
+        non_review = [c for c in classifications if c.tier != Tier.REVIEW]
+        if non_review:
+            sender_tier_counts: dict[str, dict[Tier, int]] = defaultdict(lambda: defaultdict(int))
+            for c in non_review:
+                sender = sender_lookup.get(c.message_id)
+                if sender:
+                    sender_tier_counts[sender][c.tier] += 1
+
+            review_sender_groups: dict[str, list[Classification]] = defaultdict(list)
+            for c in items:
+                sender = sender_lookup.get(c.message_id)
+                if sender:
+                    review_sender_groups[sender].append(c)
+
+            for sender, review_items in review_sender_groups.items():
+                tier_counts = sender_tier_counts.get(sender)
+                if not tier_counts:
+                    continue
+
+                total_non_review = sum(tier_counts.values())
+                if total_non_review < CROSS_TIER_MIN_EVIDENCE:
+                    continue
+
+                dominant_tier, dominant_count = max(tier_counts.items(), key=lambda x: x[1])
+                ratio = dominant_count / total_non_review
+
+                if ratio < CROSS_TIER_DOMINANCE_RATIO:
+                    continue
+
+                if not _check_protected_trash_safety(review_items, dominant_tier):
+                    continue
+
+                ids = [c.message_id for c in review_items]
+                avg_conf = mean([c.confidence for c in review_items])
+
+                resolved.append(AutoResolution(
+                    message_ids=ids,
+                    tier=dominant_tier,
+                    reason=(
+                        f"Cross-tier sender: {sender} has {dominant_count}/{total_non_review} "
+                        f"non-review emails in {dominant_tier.value} ({ratio:.0%})"
+                    ),
+                    cluster_label=review_items[0].cluster_label,
+                    avg_confidence=avg_conf,
+                ))
+                resolved_ids.update(ids)
 
     # Pass 1: Cluster unanimity
     cluster_groups: dict[int, list[Classification]] = defaultdict(list)

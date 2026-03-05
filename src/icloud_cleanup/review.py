@@ -177,6 +177,16 @@ def run_review(
     msg_index: dict[int, Message] = {m.message_id: m for m in messages}
     sender_lookup: dict[int, str] = {m.message_id: m.sender_address for m in messages}
 
+    # Action legend
+    console.print(
+        "\n[bold]Review Actions:[/bold]\n"
+        "  [red]Trash all[/red]   — mark entire cluster for deletion\n"
+        "  [green]Keep all[/green]   — keep all emails in cluster (no action)\n"
+        "  [yellow]Skip[/yellow]       — decide later (come back on next run)\n"
+        "  [cyan]Inspect[/cyan]    — review emails one by one within cluster\n"
+        "  [magenta]← Back[/magenta]     — return to previous cluster\n"
+    )
+
     # Group by cluster
     clusters: dict[str, list[Classification]] = {}
     for c in remaining_classifications:
@@ -194,9 +204,13 @@ def run_review(
     for mid_str in session.individual_decisions:
         already_decided_ids.add(int(mid_str))
 
-    for label, items in sorted_clusters:
+    idx = 0
+    while idx < len(sorted_clusters):
+        label, items = sorted_clusters[idx]
+
         # Skip already-reviewed clusters
         if label in session.decisions:
+            idx += 1
             continue
 
         # Trash auto-approve
@@ -211,6 +225,7 @@ def run_review(
                 "auto_approved": True,
             }
             save_session(session, session_path)
+            idx += 1
             continue
 
         # Display cluster panel
@@ -227,9 +242,14 @@ def run_review(
         # Flush console before questionary prompt
         console.file.flush() if hasattr(console, "file") else None
 
+        position = f"[{idx + 1}/{len(sorted_clusters)}]"
+        choices = ["Trash all", "Keep all", "Skip", "Inspect"]
+        if idx > 0:
+            choices.append("← Back")
+
         action = questionary.select(
-            f"Action for '{label}' ({len(items)} emails):",
-            choices=["Approve", "Skip", "Reclassify", "Split", "Inspect"],
+            f"{position} '{label}' ({len(items)} emails) — trash, keep, or inspect?",
+            choices=choices,
         ).ask()
 
         if action is None:
@@ -238,83 +258,74 @@ def run_review(
             save_session(session, session_path)
             return session
 
-        action_lower = action.lower()
+        if action == "← Back":
+            if idx > 0:
+                idx -= 1
+                prev_label = sorted_clusters[idx][0]
+                if prev_label in session.decisions:
+                    del session.decisions[prev_label]
+                    for c in sorted_clusters[idx][1]:
+                        session.individual_decisions.pop(str(c.message_id), None)
+                    save_session(session, session_path)
+            continue
 
-        if action_lower == "reclassify":
-            target_tier = questionary.select(
-                "Reclassify to:",
-                choices=[t.value for t in Tier],
-            ).ask()
-            if target_tier:
-                session.decisions[label] = {
-                    "action": "reclassify",
-                    "target_tier": target_tier,
-                    "timestamp": int(time.time()),
-                }
-        elif action_lower == "split":
-            choices = [
-                questionary.Choice(
-                    f"[{c.message_id}] {msg_index.get(c.message_id, c).subject[:60] if c.message_id in msg_index else f'msg_{c.message_id}'}",
-                    value=str(c.message_id),
-                )
-                for c in items
-            ]
-            selected = questionary.checkbox(
-                "Select emails to approve for deletion:",
-                choices=choices,
-            ).ask()
-            if selected:
-                ts = int(time.time())
-                for mid_str in selected:
-                    session.individual_decisions[mid_str] = {
-                        "action": "approve",
-                        "timestamp": ts,
-                    }
-                # Mark non-selected as skipped
-                selected_set = set(selected)
-                for c in items:
-                    if str(c.message_id) not in selected_set:
-                        session.individual_decisions[str(c.message_id)] = {
-                            "action": "skip",
-                            "timestamp": ts,
-                        }
-            session.decisions[label] = {
-                "action": "split",
-                "timestamp": int(time.time()),
-            }
-        elif action_lower == "inspect":
+        action_lower = action.lower()
+        # Map new labels to internal action names
+        action_map = {"trash all": "approve", "keep all": "skip"}
+        internal_action = action_map.get(action_lower, action_lower)
+
+        if internal_action == "inspect":
             ts = int(time.time())
-            for c in items:
+            msg_idx = 0
+            while msg_idx < len(items):
+                c = items[msg_idx]
                 msg = msg_index.get(c.message_id)
-                if msg:
-                    console.print(
-                        f"\n  [bold]{msg.subject}[/bold]\n"
-                        f"  From: {msg.sender_address}\n"
-                        f"  Tier: {c.tier.value} | Confidence: {c.confidence:.3f}"
-                    )
-                    per_action = questionary.select(
-                        f"  Action for message {c.message_id}:",
-                        choices=["Approve", "Skip"],
-                    ).ask()
-                    if per_action:
-                        session.individual_decisions[str(c.message_id)] = {
-                            "action": per_action.lower(),
-                            "timestamp": ts,
-                        }
+                if not msg:
+                    msg_idx += 1
+                    continue
+
+                console.print(
+                    f"\n  [bold]{msg.subject}[/bold]\n"
+                    f"  From: {msg.sender_address}\n"
+                    f"  Tier: {c.tier.value} | Confidence: {c.confidence:.3f}"
+                )
+                msg_choices = ["Trash", "Keep"]
+                if msg_idx > 0:
+                    msg_choices.append("← Back")
+
+                per_action = questionary.select(
+                    f"  [{msg_idx + 1}/{len(items)}] Trash this email or keep it?",
+                    choices=msg_choices,
+                ).ask()
+                if per_action is None:
+                    break
+                if per_action == "← Back":
+                    if msg_idx > 0:
+                        msg_idx -= 1
+                        prev_c = items[msg_idx]
+                        session.individual_decisions.pop(str(prev_c.message_id), None)
+                    continue
+
+                per_action_map = {"trash": "approve", "keep": "skip"}
+                session.individual_decisions[str(c.message_id)] = {
+                    "action": per_action_map.get(per_action.lower(), per_action.lower()),
+                    "timestamp": ts,
+                }
+                msg_idx += 1
             session.decisions[label] = {
                 "action": "inspect",
                 "timestamp": int(time.time()),
             }
         else:
             session.decisions[label] = {
-                "action": action_lower,
+                "action": internal_action,
                 "timestamp": int(time.time()),
             }
 
         save_session(session, session_path)
 
-        # Propagation suggestions after each decision
-        if action_lower in ("approve", "reclassify"):
+        # Propagation suggestions after trash or reclassify
+        if internal_action in ("approve", "reclassify"):
             item_senders = {
                 sender_lookup.get(c.message_id, "")
                 for c in items
@@ -323,7 +334,7 @@ def run_review(
             for sender in item_senders:
                 suggestions = find_propagation_targets(
                     decided_sender=sender,
-                    action=action_lower,
+                    action=internal_action,
                     all_classifications=remaining_classifications,
                     sender_lookup=sender_lookup,
                     already_decided=already_decided_ids,
@@ -338,21 +349,21 @@ def run_review(
                         f"({len(suggestion.target_message_ids)} emails)"
                     )
                     apply = questionary.confirm(
-                        f"Apply '{action_lower}' to these {len(suggestion.target_message_ids)} emails?",
+                        f"Apply '{internal_action}' to these {len(suggestion.target_message_ids)} emails?",
                         default=False,
                     ).ask()
                     if apply:
                         ts = int(time.time())
                         for mid in suggestion.target_message_ids:
                             session.individual_decisions[str(mid)] = {
-                                "action": action_lower,
+                                "action": internal_action,
                                 "timestamp": ts,
                             }
                             already_decided_ids.add(mid)
                         session.propagation_applied.append({
                             "source": suggestion.source_sender,
                             "targets": suggestion.target_senders,
-                            "action": action_lower,
+                            "action": internal_action,
                             "message_ids": suggestion.target_message_ids,
                         })
                         save_session(session, session_path)
@@ -360,6 +371,8 @@ def run_review(
         # Update already decided IDs
         for c in items:
             already_decided_ids.add(c.message_id)
+
+        idx += 1
 
     session.completed = True
     save_session(session, session_path)

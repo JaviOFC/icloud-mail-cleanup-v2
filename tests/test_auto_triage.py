@@ -51,10 +51,10 @@ class TestClusterUnanimity:
         assert result.auto_resolved[0].tier == Tier.TRASH
 
     def test_skips_low_confidence_cluster(self) -> None:
-        """Cluster with confidence <= 0.85 should NOT be auto-resolved."""
+        """Cluster with confidence <= 0.60 should NOT be auto-resolved."""
         items = [
-            _make_classification(1, Tier.REVIEW, 0.80, cluster_id=1, cluster_label="maybe"),
-            _make_classification(2, Tier.REVIEW, 0.70, cluster_id=1, cluster_label="maybe"),
+            _make_classification(1, Tier.REVIEW, 0.55, cluster_id=1, cluster_label="maybe"),
+            _make_classification(2, Tier.REVIEW, 0.50, cluster_id=1, cluster_label="maybe"),
         ]
         sender_lookup = {1: "a@test.com", 2: "b@test.com"}
 
@@ -129,10 +129,10 @@ class TestSenderConsistency:
         assert result.auto_resolved_count == 0
 
     def test_skips_sender_below_threshold(self) -> None:
-        """Sender with confidence <= 0.80 should NOT be auto-resolved."""
+        """Sender with confidence <= 0.55 should NOT be auto-resolved."""
         items = [
-            _make_classification(1, Tier.REVIEW, 0.75, cluster_id=None),
-            _make_classification(2, Tier.REVIEW, 0.78, cluster_id=None),
+            _make_classification(1, Tier.REVIEW, 0.50, cluster_id=None),
+            _make_classification(2, Tier.REVIEW, 0.48, cluster_id=None),
         ]
         sender_lookup = {1: "low@test.com", 2: "low@test.com"}
 
@@ -215,6 +215,87 @@ class TestReviewOnlyFilter:
 
         result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 4
+
+
+class TestCrossTierSender:
+    """Pass 0: auto-resolve review items when sender has consistent non-review classification."""
+
+    def test_resolves_review_items_when_sender_dominant_in_trash(self) -> None:
+        """Sender with >75% non-review emails in trash → review emails auto-resolved to trash."""
+        items = [
+            # Non-review: 4 trash emails from this sender
+            _make_classification(1, Tier.TRASH, 0.30, cluster_id=None),
+            _make_classification(2, Tier.TRASH, 0.28, cluster_id=None),
+            _make_classification(3, Tier.TRASH, 0.32, cluster_id=None),
+            _make_classification(4, Tier.TRASH, 0.25, cluster_id=None),
+            # Review: 2 emails from the same sender
+            _make_classification(5, Tier.REVIEW, 0.55, cluster_id=None),
+            _make_classification(6, Tier.REVIEW, 0.52, cluster_id=None),
+        ]
+        sender_lookup = {i: "spam@junk.com" for i in range(1, 7)}
+
+        result = auto_triage(items, sender_lookup, review_only=True)
+        assert result.auto_resolved_count == 2
+        assert result.auto_resolved[0].tier == Tier.TRASH
+        assert "cross-tier" in result.auto_resolved[0].reason.lower()
+
+    def test_skips_when_insufficient_evidence(self) -> None:
+        """Sender with <3 non-review emails should not trigger cross-tier resolution."""
+        items = [
+            _make_classification(1, Tier.TRASH, 0.30, cluster_id=None),
+            _make_classification(2, Tier.TRASH, 0.28, cluster_id=None),
+            # Only 2 non-review emails — below threshold of 3
+            _make_classification(3, Tier.REVIEW, 0.55, cluster_id=None),
+        ]
+        sender_lookup = {1: "sparse@test.com", 2: "sparse@test.com", 3: "sparse@test.com"}
+
+        result = auto_triage(items, sender_lookup, review_only=True)
+        assert result.auto_resolved_count == 0
+
+    def test_skips_when_sender_split_across_tiers(self) -> None:
+        """Sender with emails split evenly across tiers should not be auto-resolved."""
+        items = [
+            _make_classification(1, Tier.TRASH, 0.30, cluster_id=None),
+            _make_classification(2, Tier.TRASH, 0.28, cluster_id=None),
+            _make_classification(3, Tier.KEEP_HISTORICAL, 0.70, cluster_id=None),
+            _make_classification(4, Tier.KEEP_HISTORICAL, 0.72, cluster_id=None),
+            # Review items — sender has 50/50 split, no dominant tier
+            _make_classification(5, Tier.REVIEW, 0.55, cluster_id=None),
+        ]
+        sender_lookup = {i: "split@test.com" for i in range(1, 6)}
+
+        result = auto_triage(items, sender_lookup, review_only=True)
+        assert result.auto_resolved_count == 0
+
+    def test_protected_blocks_cross_tier_trash(self) -> None:
+        """Protected review items should not be auto-trashed via cross-tier."""
+        items = [
+            _make_classification(1, Tier.TRASH, 0.30, cluster_id=None),
+            _make_classification(2, Tier.TRASH, 0.28, cluster_id=None),
+            _make_classification(3, Tier.TRASH, 0.32, cluster_id=None),
+            _make_classification(4, Tier.REVIEW, 0.55, cluster_id=None, protected=True),
+        ]
+        sender_lookup = {i: "sender@test.com" for i in range(1, 5)}
+
+        result = auto_triage(items, sender_lookup, review_only=True)
+        assert result.auto_resolved_count == 0
+
+    def test_cross_tier_disabled_when_review_only_false(self) -> None:
+        """Cross-tier pass only runs when review_only=True."""
+        items = [
+            _make_classification(1, Tier.TRASH, 0.30, cluster_id=None),
+            _make_classification(2, Tier.TRASH, 0.28, cluster_id=None),
+            _make_classification(3, Tier.TRASH, 0.32, cluster_id=None),
+            _make_classification(4, Tier.REVIEW, 0.45, cluster_id=None),
+        ]
+        sender_lookup = {i: "sender@test.com" for i in range(1, 5)}
+
+        # review_only=False processes all items, no cross-tier pass
+        result = auto_triage(items, sender_lookup, review_only=False)
+        # The review item (conf 0.45) won't match cluster/sender thresholds
+        # because it's mixed tiers in one sender group
+        cross_tier_resolutions = [r for r in result.auto_resolved if "cross-tier" in r.reason.lower()]
+        assert len(cross_tier_resolutions) == 0
 
 
 class TestAutoTriageResult:
