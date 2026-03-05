@@ -46,6 +46,15 @@ def save_checkpoint(
                 "protected": c.protected,
                 "timestamp": c.timestamp,
             }
+            # Phase 2 optional fields — only write when present
+            if c.content_score is not None:
+                obj["content_score"] = c.content_score
+            if c.cluster_id is not None:
+                obj["cluster_id"] = c.cluster_id
+            if c.cluster_label is not None:
+                obj["cluster_label"] = c.cluster_label
+            if c.content_source is not None:
+                obj["content_source"] = c.content_source
             f.write(json.dumps(obj) + "\n")
 
     os.replace(tmp_path, path)
@@ -76,6 +85,10 @@ def load_checkpoint(path: Path) -> dict[int, Classification]:
                     signals=obj["signals"],
                     protected=obj["protected"],
                     timestamp=obj["timestamp"],
+                    content_score=obj.get("content_score"),
+                    cluster_id=obj.get("cluster_id"),
+                    cluster_label=obj.get("cluster_label"),
+                    content_source=obj.get("content_source"),
                 )
                 result[c.message_id] = c
             except (json.JSONDecodeError, KeyError, ValueError) as exc:

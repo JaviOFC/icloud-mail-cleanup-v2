@@ -36,6 +36,7 @@ class Message:
     automated_conversation: int
     model_category: int | None
     model_high_impact: int
+    has_document_attachment: bool = False
 
 
 @dataclass
@@ -51,6 +52,8 @@ class ContactProfile:
     reply_rate: float
     flagged_count: int
     is_bidirectional: bool
+    in_system_contacts: bool = False
+    name_matched_contact: bool = False
 
 
 @dataclass
@@ -73,3 +76,8 @@ class Classification:
     signals: str
     protected: bool
     timestamp: int
+    # Phase 2 content analysis fields (optional, backward-compatible)
+    content_score: float | None = None
+    cluster_id: int | None = None
+    cluster_label: str | None = None
+    content_source: str | None = None
