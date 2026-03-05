@@ -1,0 +1,25 @@
+/* Global styles for iCloud Mail Cleanup TUI */
+
+/* Tier color classes mapped to Textual theme variables */
+.tier-trash { color: $error; }
+.tier-keep-active { color: $success; }
+.tier-keep-historical { color: $accent; }
+.tier-review { color: $warning; }
+
+/* Storage banner */
+#storage-banner {
+    height: 3;
+    content-align: center middle;
+    text-style: bold;
+    background: $panel;
+    margin: 1 2;
+}
+
+/* Common layout */
+.centered {
+    align: center middle;
+}
+
+.full-width {
+    width: 100%;
+}
