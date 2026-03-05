@@ -6,6 +6,12 @@
 .tier-keep-historical { color: $accent; }
 .tier-review { color: $warning; }
 
+/* Tier background variants for both themes */
+.tier-trash-bg { background: $error 15%; }
+.tier-keep-active-bg { background: $success 15%; }
+.tier-keep-historical-bg { background: $accent 15%; }
+.tier-review-bg { background: $warning 15%; }
+
 /* Storage banner */
 #storage-banner {
     height: 3;
@@ -22,4 +28,24 @@
 
 .full-width {
     width: 100%;
+}
+
+/* Help overlay modal */
+HelpScreen {
+    align: center middle;
+}
+
+HelpScreen > #help-container {
+    width: 60;
+    max-height: 80%;
+    background: $surface;
+    border: thick $primary;
+    padding: 1 2;
+}
+
+HelpScreen > #help-container > #help-title {
+    text-align: center;
+    text-style: bold;
+    width: 100%;
+    margin-bottom: 1;
 }

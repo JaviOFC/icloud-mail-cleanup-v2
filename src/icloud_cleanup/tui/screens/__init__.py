@@ -34,4 +34,4 @@ class PlaceholderScreen(Screen):
         yield Footer()
 
 
-__all__ = ["ReviewScreen", "ExecuteScreen", "PipelineScreen"]
+__all__ = ["ReviewScreen", "ExecuteScreen", "PipelineScreen", "HelpScreen"]

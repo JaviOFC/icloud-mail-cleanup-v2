@@ -11,6 +11,7 @@ from textual.binding import Binding
 
 from icloud_cleanup.tui.screens import ExecuteScreen, PipelineScreen, ReviewScreen
 from icloud_cleanup.tui.screens.dashboard import DashboardScreen
+from icloud_cleanup.tui.screens.help_overlay import HelpScreen
 
 
 class CleanupApp(App):
@@ -26,11 +27,14 @@ class CleanupApp(App):
     }
     DEFAULT_MODE = "dashboard"
 
+    SCREENS = {"help": HelpScreen}
+
     BINDINGS = [
         Binding("d", "switch_mode('dashboard')", "Dashboard", priority=True),
         Binding("r", "switch_mode('review')", "Review", priority=True),
         Binding("e", "switch_mode('execute')", "Execute", priority=True),
         Binding("p", "switch_mode('pipeline')", "Pipeline", priority=True),
+        Binding("question_mark", "push_screen('help')", "Help"),
         Binding("t", "toggle_dark", "Theme"),
         Binding("q", "quit", "Quit"),
     ]

@@ -125,6 +125,62 @@ async def test_dashboard_shows_storage_banner(tmp_path: Path) -> None:
         assert widget is not None
 
 
+# --- Help overlay tests ---
+
+
+@pytest.mark.asyncio
+async def test_help_overlay_opens(tmp_path: Path) -> None:
+    """Pressing ? should push the HelpScreen modal."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.screens.help_overlay import HelpScreen
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.press("question_mark")
+        assert isinstance(app.screen, HelpScreen)
+
+
+@pytest.mark.asyncio
+async def test_help_overlay_closes(tmp_path: Path) -> None:
+    """Opening help and pressing Escape should return to previous screen."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.screens.dashboard import DashboardScreen
+    from icloud_cleanup.tui.screens.help_overlay import HelpScreen
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.press("question_mark")
+        assert isinstance(app.screen, HelpScreen)
+
+        await pilot.press("escape")
+        assert isinstance(app.screen, DashboardScreen)
+
+
+@pytest.mark.asyncio
+async def test_theme_toggle_both_directions(tmp_path: Path) -> None:
+    """Theme should toggle dark->light->dark reliably."""
+    from icloud_cleanup.tui import CleanupApp
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        initial = app.theme
+        await pilot.press("t")
+        toggled = app.theme
+        assert toggled != initial
+
+        await pilot.press("t")
+        assert app.theme == initial
+
+        # Verify the actual theme names
+        assert {initial, toggled} == {"textual-dark", "textual-light"}
+
+
 # --- Review screen tests ---
 
 
