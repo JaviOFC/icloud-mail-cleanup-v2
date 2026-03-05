@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing."
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-05T20:28:00Z"
-last_activity: "2026-03-05 - Completed plan 04-01: TUI foundation"
+status: "Execute & Pipeline screens complete. 360 tests passing."
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-05T20:39:39Z"
+last_activity: "2026-03-05 - Completed plan 04-03: Execute & Pipeline screens"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 12
-  completed_plans: 12
+  completed_plans: 14
   percent: 100
 ---
 
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 4 of 4 (Interface & GUI)
-Plan: 1 of 2+ in current phase -- TUI foundation complete
-Status: TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing.
-Last activity: 2026-03-05 - Completed plan 04-01: TUI foundation
+Plan: 3 of 4 in current phase -- Execute & Pipeline screens complete
+Status: Execute screen (dry-run default, live progress) and Pipeline screen (scan/classify/analyze worker) implemented. 360 tests passing.
+Last activity: 2026-03-05 - Completed plan 04-03: Execute & Pipeline screens
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 14
 - Average duration: 4min
 - Total execution time: 0.80 hours
 
@@ -46,10 +46,10 @@ Progress: [██████████] 100%
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
 | 3 | 3 | 16min | 5min |
-| 4 | 1 | 6min | 6min |
+| 4 | 3 | 13min | 4min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (8min), 03-01 (6min), 03-02 (5min), 03-03 (5min), 04-01 (6min)
+- Last 5 plans: 03-01 (6min), 03-02 (5min), 03-03 (5min), 04-01 (6min), 04-03 (7min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -99,6 +99,9 @@ Recent decisions affecting current work:
 - [04-01]: MODES uses class references (callables) instead of string names for reliable screen resolution
 - [04-01]: Dashboard polls for async data via set_timer(0.3) instead of reactive attributes for simplicity
 - [04-01]: Lazy import of icloud_cleanup.tui in CLI avoids textual import overhead for non-TUI commands
+- [04-03]: app.call_from_thread() used for thread-safe widget updates (Screen lacks this method in Textual 1.0.0)
+- [04-03]: Pipeline step 3 (MLX content analysis) degrades gracefully if dependencies unavailable
+- [04-03]: Execute screen chunks to batch_size=100 for progress granularity
 
 ### Roadmap Evolution
 
@@ -122,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T20:28:00Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-interface-gui/04-01-SUMMARY.md
+Last session: 2026-03-05T20:39:39Z
+Stopped at: Completed 04-03-PLAN.md
+Resume file: .planning/phases/04-interface-gui/04-03-SUMMARY.md
