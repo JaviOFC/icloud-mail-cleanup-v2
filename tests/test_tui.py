@@ -125,6 +125,38 @@ async def test_dashboard_shows_storage_banner(tmp_path: Path) -> None:
         assert widget is not None
 
 
+# --- Welcome overlay tests ---
+
+
+@pytest.mark.asyncio
+async def test_welcome_overlay_shown_on_launch(tmp_path: Path) -> None:
+    """Welcome overlay should appear on first launch."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.dismissible_overlay import WelcomeOverlay
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        assert isinstance(app.screen, WelcomeOverlay)
+
+
+@pytest.mark.asyncio
+async def test_welcome_overlay_dismisses_on_keypress(tmp_path: Path) -> None:
+    """Any keypress should dismiss the welcome overlay."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.screens.dashboard import DashboardScreen
+    from icloud_cleanup.tui.widgets.dismissible_overlay import WelcomeOverlay
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        assert isinstance(app.screen, WelcomeOverlay)
+        await pilot.press("enter")
+        assert isinstance(app.screen, DashboardScreen)
+
+
 # --- Help overlay tests ---
 
 

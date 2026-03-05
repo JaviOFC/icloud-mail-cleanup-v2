@@ -917,6 +917,7 @@ def cmd_tui(args: argparse.Namespace) -> None:
         checkpoint_path=checkpoint_path,
         session_path=session_path,
         db_path=args.db,
+        show_welcome=True,
     )
     app.run()
 
