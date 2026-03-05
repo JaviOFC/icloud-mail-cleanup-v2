@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing."
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-05T20:28:00Z"
-last_activity: "2026-03-05 - Completed plan 04-01: TUI foundation"
+status: "Review screen complete: cluster list/detail split, multi-select, propagation tab, auto-triage, API fallback. 334 tests passing."
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-05T20:41:29Z"
+last_activity: "2026-03-05 - Completed plan 04-02: Review screen"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 13
+  completed_plans: 13
   percent: 100
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 4 of 4 (Interface & GUI)
-Plan: 1 of 2+ in current phase -- TUI foundation complete
-Status: TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing.
-Last activity: 2026-03-05 - Completed plan 04-01: TUI foundation
+Plan: 2 of 4 in current phase -- Review screen complete
+Status: Review screen complete: cluster list/detail split, multi-select, propagation tab, auto-triage, API fallback. 334 tests passing.
+Last activity: 2026-03-05 - Completed plan 04-02: Review screen
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 4min
-- Total execution time: 0.80 hours
+- Total execution time: 0.95 hours
 
 **By Phase:**
 
@@ -46,10 +46,10 @@ Progress: [██████████] 100%
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
 | 3 | 3 | 16min | 5min |
-| 4 | 1 | 6min | 6min |
+| 4 | 2 | 15min | 7min |
 
 **Recent Trend:**
-- Last 5 plans: 02-03 (8min), 03-01 (6min), 03-02 (5min), 03-03 (5min), 04-01 (6min)
+- Last 5 plans: 03-01 (6min), 03-02 (5min), 03-03 (5min), 04-01 (6min), 04-02 (9min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -99,6 +99,10 @@ Recent decisions affecting current work:
 - [04-01]: MODES uses class references (callables) instead of string names for reliable screen resolution
 - [04-01]: Dashboard polls for async data via set_timer(0.3) instead of reactive attributes for simplicity
 - [04-01]: Lazy import of icloud_cleanup.tui in CLI avoids textual import overhead for non-TUI commands
+- [04-02]: app.call_from_thread (not self.call_from_thread) in @work methods -- Textual 1.0 has call_from_thread on App only
+- [04-02]: Cluster labels disambiguated with tier suffix when duplicated across tiers
+- [04-02]: All domain module imports at top level for test mockability
+- [04-02]: PropagationTabWidget selects all on bulk-approve if none explicitly selected
 
 ### Roadmap Evolution
 
@@ -122,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T20:28:00Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-interface-gui/04-01-SUMMARY.md
+Last session: 2026-03-05T20:41:29Z
+Stopped at: Completed 04-02-PLAN.md
+Resume file: .planning/phases/04-interface-gui/04-02-SUMMARY.md
