@@ -60,11 +60,13 @@ Plans:
   2. An interactive terminal walkthrough lets the user review and approve/reject each category group before any action is taken
   3. Approved deletions move emails to Trash only (never permanent delete), with a complete action log and restore capability
   4. For remaining low-confidence cases, users can opt in to Claude API analysis (metadata summaries only, never full bodies) to get final classifications
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md -- Report data builder (tier-first + cluster-detail views, JSON/Markdown/terminal formats) and auto-triage pre-review resolution engine
+- [ ] 03-02-PLAN.md -- AppleScript executor (ROWID-based trash moves, action log SQLite, dry-run, batch execution) and Claude API fallback (metadata payloads, cost estimation, batch API)
+- [ ] 03-03-PLAN.md -- Interactive review session (questionary prompts, resumable sessions, trash auto-approve) + propagation engine + CLI wiring (review, execute, enhanced report subcommands)
+- [ ] 03-04-PLAN.md -- End-to-end workflow verification checkpoint (report + review + dry-run execution on real data)
 
 ## Progress
 
@@ -74,8 +76,8 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
-| 2. Content Analysis + Full Classification | 1/3 | In Progress|  |
-| 3. Report, Review + Safe Execution | 0/2 | Not started | - |
+| 2. Content Analysis + Full Classification | 3/3 | Complete | 2026-03-05 |
+| 3. Report, Review + Safe Execution | 0/4 | Not started | - |
 
 ### Phase 4: Interface & GUI
 
