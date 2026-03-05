@@ -8,9 +8,10 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, ProgressBar, Static
+from textual.widgets import Button, Header, ProgressBar, Static
 from textual.worker import get_current_worker
 
+from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.pipeline_log import PipelineLogWidget
 from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
@@ -43,7 +44,7 @@ class PipelineScreen(Screen):
             with Horizontal(id="pipeline-buttons"):
                 yield Button("Run Pipeline", id="btn-pipeline", variant="primary")
                 yield Button("Cancel", id="btn-cancel", variant="warning", disabled=True)
-        yield Footer()
+        yield ActiveFooter()
 
     def on_mount(self) -> None:
         show_screen_help_if_first_visit(self, "pipeline")

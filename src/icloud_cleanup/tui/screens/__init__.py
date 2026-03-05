@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Header, Static
+
+from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 
 from icloud_cleanup.tui.screens.review import ReviewScreen
 from icloud_cleanup.tui.screens.execute import ExecuteScreen as ExecuteScreen  # noqa: E501
@@ -31,7 +33,7 @@ class PlaceholderScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(self._label, classes="placeholder-label")
-        yield Footer()
+        yield ActiveFooter()
 
 
 __all__ = ["ReviewScreen", "ExecuteScreen", "PipelineScreen", "HelpScreen"]

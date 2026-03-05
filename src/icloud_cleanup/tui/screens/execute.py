@@ -6,9 +6,10 @@ from textual import work
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, ProgressBar, RichLog, Static
+from textual.widgets import Button, Header, ProgressBar, RichLog, Static
 from textual.worker import get_current_worker
 
+from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
@@ -39,7 +40,7 @@ class ExecuteScreen(Screen):
                 yield SpinnerWidget(id="exec-spinner")
             yield Static("Success: 0 | Errors: 0 | Skipped: 0", id="exec-stats")
             yield RichLog(id="exec-log", markup=True, auto_scroll=True, max_lines=500)
-        yield Footer()
+        yield ActiveFooter()
 
     def on_mount(self) -> None:
         self._update_summary()

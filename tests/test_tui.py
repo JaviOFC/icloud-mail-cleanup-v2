@@ -125,6 +125,30 @@ async def test_dashboard_shows_storage_banner(tmp_path: Path) -> None:
         assert widget is not None
 
 
+# --- Active footer tests ---
+
+
+@pytest.mark.asyncio
+async def test_active_footer_highlights_current_mode(tmp_path: Path) -> None:
+    """ActiveFooter should render with the current mode highlighted."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        footer = app.query_one(ActiveFooter)
+        assert footer is not None
+        # Default mode is dashboard
+        assert app.current_mode == "dashboard"
+
+        # Switch to review
+        await pilot.press("r")
+        await pilot.pause(delay=0.5)
+        assert app.current_mode == "review"
+
+
 # --- Welcome overlay tests ---
 
 

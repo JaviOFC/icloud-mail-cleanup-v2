@@ -5,8 +5,9 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Header, Static
 
+from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 from icloud_cleanup.tui.widgets.storage_banner import StorageBannerWidget
 from icloud_cleanup.tui.widgets.tier_summary import TierSummaryWidget
@@ -23,7 +24,7 @@ class DashboardScreen(Screen):
             yield StorageBannerWidget(id="storage-banner")
             yield TierSummaryWidget(id="tier-summary")
             yield Static("Pipeline: Ready", id="pipeline-status")
-        yield Footer()
+        yield ActiveFooter()
 
     def on_mount(self) -> None:
         self._check_data()

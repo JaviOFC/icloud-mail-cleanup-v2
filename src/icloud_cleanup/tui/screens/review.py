@@ -12,7 +12,6 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import (
     Button,
-    Footer,
     Header,
     Static,
     TabbedContent,
@@ -33,6 +32,7 @@ from icloud_cleanup.review import (
     load_session,
     save_session,
 )
+from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.cluster_detail import ClusterDetailWidget
 from icloud_cleanup.tui.widgets.cluster_list import ClusterListWidget
 from icloud_cleanup.tui.widgets.propagation_tab import PropagationTabWidget
@@ -77,7 +77,7 @@ class ReviewScreen(Screen):
                 yield Static("Loading...", id="api-status")
             with TabPane("Propagation", id="tab-propagation"):
                 yield PropagationTabWidget(id="propagation-tab")
-        yield Footer()
+        yield ActiveFooter()
 
     def on_mount(self) -> None:
         self._check_data()
