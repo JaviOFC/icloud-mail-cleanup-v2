@@ -4,6 +4,14 @@
     padding: 1;
 }
 
+#pipeline-description {
+    height: auto;
+    margin: 0 2 1 2;
+    padding: 1 2;
+    background: $panel;
+    color: $text-muted;
+}
+
 #pipeline-status {
     text-align: center;
     text-style: bold;

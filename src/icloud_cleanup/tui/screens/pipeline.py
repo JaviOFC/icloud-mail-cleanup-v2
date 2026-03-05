@@ -29,6 +29,12 @@ class PipelineScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="pipeline-content"):
+            yield Static(
+                "Re-run the analysis pipeline: Scan -> Classify -> Content Analysis.\n"
+                "This reads your Mail.app database, classifies emails by metadata signals,\n"
+                "and optionally runs MLX GPU content analysis for deeper clustering.",
+                id="pipeline-description",
+            )
             yield Static("Pipeline: Ready", id="pipeline-status")
             with Horizontal(id="pipeline-progress-row"):
                 yield ProgressBar(id="pipeline-progress", total=3, show_eta=False)
