@@ -28,12 +28,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Emails ever replied to, forwarded, or from known personal contacts are protected from Trash classification regardless of other signals
   4. The metadata-only first pass classifies a majority of emails with high confidence, deferring ambiguous emails to Review for Phase 2
   5. Classification output is saved as a JSON checkpoint artifact consumable by subsequent phases
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md -- Project setup, domain models (Message/Contact/Classification), scanner module (DB access, bulk extraction, sender stats)
+- [ ] 01-02-PLAN.md -- Contact reputation model (Sent mailbox profiling, protection logic, behavioral signal extraction)
+- [ ] 01-03-PLAN.md -- Classification engine (8-signal weighted scoring, tier assignment, protection enforcement) + JSONL checkpoint persistence
+- [ ] 01-04-PLAN.md -- CLI wiring (scan/classify/report subcommands), rich progress bars, summary display, end-to-end verification
 
 ### Phase 2: Content Analysis + Full Classification
 **Goal**: Users get significantly improved classification accuracy through on-device content analysis of ambiguous emails
@@ -71,6 +72,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scanning + Metadata Classification | 0/3 | Not started | - |
+| 1. Scanning + Metadata Classification | 0/4 | Not started | - |
 | 2. Content Analysis + Full Classification | 0/2 | Not started | - |
 | 3. Report, Review + Safe Execution | 0/2 | Not started | - |
