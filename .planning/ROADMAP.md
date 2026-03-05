@@ -13,7 +13,7 @@ Build an intelligent email classification pipeline in three phases: first, a met
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scanning + Metadata Classification** - Read Envelope Index, score contacts and behavior, classify emails using metadata signals only
-- [ ] **Phase 2: Content Analysis + Full Classification** - Parse .emlx bodies, generate MLX embeddings, cluster semantically, upgrade classification with content signals
+- [x] **Phase 2: Content Analysis + Full Classification** - Parse .emlx bodies, generate MLX embeddings, cluster semantically, upgrade classification with content signals
 - [ ] **Phase 3: Report, Review + Safe Execution** - Generate cleanup report, interactive terminal walkthrough, execute approved deletions with safety guarantees
 
 ## Phase Details
@@ -47,9 +47,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Install dependencies, extend Classification model with content fields, EMLX parser (ROWID lookup, body extraction, HTML stripping)
-- [ ] 02-02-PLAN.md -- MLX batch embedding generator with model fallback, HDBSCAN clusterer with TF-IDF labeling and content score derivation
-- [ ] 02-03-PLAN.md -- Fused classification engine (metadata + content blending, reclassification rules), CLI analyze subcommand, end-to-end verification
+- [x] 02-01-PLAN.md -- Install dependencies, extend Classification model with content fields, EMLX parser (ROWID lookup, body extraction, HTML stripping)
+- [x] 02-02-PLAN.md -- MLX batch embedding generator with model fallback, HDBSCAN clusterer with TF-IDF labeling and content score derivation
+- [x] 02-03-PLAN.md -- Fused classification engine (metadata + content blending, reclassification rules), CLI analyze subcommand, end-to-end verification
 
 ### Phase 3: Report, Review + Safe Execution
 **Goal**: Users can review classification results interactively and execute approved deletions safely with full reversibility
