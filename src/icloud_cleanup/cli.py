@@ -35,6 +35,7 @@ from icloud_cleanup.scanner import (
     get_sender_display_names,
     get_sender_stats,
     get_sent_recipients,
+    load_summaries,
     open_db,
     scan_messages,
 )
@@ -186,6 +187,18 @@ def create_parser() -> argparse.ArgumentParser:
         help="Custom action log path (default: ~/.icloud-cleanup/action_log.db)",
     )
     execute_parser.set_defaults(func=cmd_execute)
+
+    # tui
+    tui_parser = subparsers.add_parser(
+        "tui", help="Launch interactive TUI for reviewing and managing email classifications",
+    )
+    tui_parser.add_argument(
+        "--session", "-s",
+        type=Path,
+        default=None,
+        help="Path to review session JSON (default: auto-detect)",
+    )
+    tui_parser.set_defaults(func=cmd_tui)
 
     return parser
 
@@ -620,13 +633,17 @@ def cmd_review(args: argparse.Namespace) -> None:
     conn = open_db(args.db)
     try:
         messages = scan_messages(conn)
+        summaries = load_summaries(conn)
     finally:
         conn.close()
 
     msg_index: dict[int, Message] = {m.message_id: m for m in messages}
     sender_lookup: dict[int, str] = {m.message_id: m.sender_address for m in messages}
 
-    console.print(f"[bold]Loaded {len(classifications):,} classifications[/bold]\n")
+    console.print(f"[bold]Loaded {len(classifications):,} classifications[/bold]")
+    if summaries:
+        console.print(f"[bold]Loaded {len(summaries):,} email summaries[/bold]")
+    console.print()
 
     # Session management
     session_path = args.session or get_session_path()
@@ -690,6 +707,7 @@ def cmd_review(args: argparse.Namespace) -> None:
             session,
             console=console,
             session_path=session_path,
+            summary_lookup=summaries or None,
         )
 
     # Summary
@@ -876,6 +894,31 @@ def cmd_execute(args: argparse.Namespace) -> None:
             )
     finally:
         action_log.close()
+
+
+def cmd_tui(args: argparse.Namespace) -> None:
+    """Launch the interactive Textual TUI."""
+    checkpoint_path = args.checkpoint
+    if not checkpoint_path.exists():
+        console.print(f"[red]Checkpoint not found: {checkpoint_path}[/red]")
+        console.print("Run 'classify' first to create a checkpoint.")
+        sys.exit(1)
+
+    session_path = args.session
+    if session_path is None:
+        from icloud_cleanup.review import get_session_path
+
+        session_path = get_session_path()
+
+    # Lazy import to avoid textual overhead for non-TUI commands
+    from icloud_cleanup.tui import CleanupApp
+
+    app = CleanupApp(
+        checkpoint_path=checkpoint_path,
+        session_path=session_path,
+        db_path=args.db,
+    )
+    app.run()
 
 
 def main() -> None:
