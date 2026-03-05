@@ -14,7 +14,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Scanning + Metadata Classification** - Read Envelope Index, score contacts and behavior, classify emails using metadata signals only
 - [x] **Phase 2: Content Analysis + Full Classification** - Parse .emlx bodies, generate MLX embeddings, cluster semantically, upgrade classification with content signals
-- [ ] **Phase 3: Report, Review + Safe Execution** - Generate cleanup report, interactive terminal walkthrough, execute approved deletions with safety guarantees
+- [x] **Phase 3: Report, Review + Safe Execution** - Generate cleanup report, interactive terminal walkthrough, execute approved deletions with safety guarantees
+- [ ] **Phase 4: Interface & GUI (TUI)** - Textual-based terminal application for interactive review, execution, and pipeline management
 
 ## Phase Details
 
@@ -66,25 +67,35 @@ Plans:
 - [x] 03-01-PLAN.md -- Report data builder (tier-first + cluster-detail views, JSON/Markdown/terminal formats) and auto-triage pre-review resolution engine
 - [x] 03-02-PLAN.md -- AppleScript executor (ROWID-based trash moves, action log SQLite, dry-run, batch execution) and Claude API fallback (metadata payloads, cost estimation, batch API)
 - [x] 03-03-PLAN.md -- Interactive review session (questionary prompts, resumable sessions, trash auto-approve) + propagation engine + CLI wiring (review, execute, enhanced report subcommands)
-- [ ] 03-04-PLAN.md -- End-to-end workflow verification checkpoint (report + review + dry-run execution on real data)
+- [x] 03-04-PLAN.md -- End-to-end workflow verification checkpoint (report + review + dry-run execution on real data)
+
+### Phase 4: Interface & GUI (TUI)
+**Goal:** Users can interact with classification results, review clusters, execute deletions, and run the pipeline through a rich Textual-based terminal application
+**Depends on:** Phase 3
+**Requirements**: TUI-01, TUI-02, TUI-03, TUI-04, TUI-05, TUI-06, TUI-07, TUI-08, TUI-09, TUI-10, TUI-11, TUI-12
+**Success Criteria** (what must be TRUE):
+  1. Running `icloud_cleanup tui` launches a Textual app with Dashboard, Review, Execute, and Pipeline screens navigable via D/R/E/P keys
+  2. The Dashboard shows tier summaries with sparklines, storage savings, and pipeline status
+  3. The Review screen provides a two-column split (cluster list + detail) with multi-select bulk actions, auto-triage trigger, and propagation suggestions
+  4. The Execute screen runs approved deletions with live progress (dry-run by default)
+  5. The Pipeline screen can kick off scan/classify/analyze with progress bar and scrollable log
+  6. Theme toggle, help overlay, and keyboard shortcuts work throughout
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md -- App shell, dependencies, Dashboard screen with tier summary and storage widgets, CLI tui subcommand, test scaffold
+- [ ] 04-02-PLAN.md -- Review screen with cluster list + detail split, multi-select bulk actions, auto-triage, propagation toasts, session persistence
+- [ ] 04-03-PLAN.md -- Execute screen with dry-run/live progress and Pipeline screen with background workers and log output
+- [ ] 04-04-PLAN.md -- Help overlay, theme polish, and end-to-end human verification checkpoint
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
 | 2. Content Analysis + Full Classification | 3/3 | Complete | 2026-03-05 |
-| 3. Report, Review + Safe Execution | 3/4 | In Progress | - |
-
-### Phase 4: Interface & GUI
-
-**Goal:** [To be planned]
-**Requirements**: TBD
-**Depends on:** Phase 3
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (run /gsd:plan-phase 4 to break down)
+| 3. Report, Review + Safe Execution | 4/4 | Complete | 2026-03-05 |
+| 4. Interface & GUI (TUI) | 0/4 | Planned | - |
