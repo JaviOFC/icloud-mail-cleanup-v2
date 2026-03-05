@@ -42,7 +42,7 @@ class TestClusterUnanimity:
         ]
         sender_lookup = {i: f"spam{i}@junk.com" for i in range(1, 6)}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
 
         assert isinstance(result, AutoTriageResult)
         assert result.auto_resolved_count == 5
@@ -63,29 +63,29 @@ class TestClusterUnanimity:
         assert result.remaining_count == 2
 
     def test_skips_mixed_tier_cluster(self) -> None:
-        """Cluster with mixed tiers should NOT be auto-resolved."""
+        """Cluster with mixed tiers should NOT be auto-resolved by either pass."""
         items = [
             _make_classification(1, Tier.TRASH, 0.90, cluster_id=1, cluster_label="mixed"),
             _make_classification(2, Tier.REVIEW, 0.90, cluster_id=1, cluster_label="mixed"),
         ]
-        sender_lookup = {1: "a@test.com", 2: "b@test.com"}
+        # Same sender so sender consistency also skips (mixed tiers)
+        sender_lookup = {1: "same@test.com", 2: "same@test.com"}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 0
 
     def test_skips_noise_cluster(self) -> None:
-        """Noise cluster (id=-1 or None) should be skipped."""
+        """Noise cluster (id=-1 or None) should be skipped by cluster unanimity pass.
+        Use mixed senders with low confidence so sender pass also skips."""
         items = [
-            _make_classification(1, Tier.TRASH, 0.95, cluster_id=-1, cluster_label=None),
-            _make_classification(2, Tier.TRASH, 0.95, cluster_id=None, cluster_label=None),
+            _make_classification(1, Tier.REVIEW, 0.50, cluster_id=-1, cluster_label=None),
+            _make_classification(2, Tier.REVIEW, 0.50, cluster_id=None, cluster_label=None),
         ]
         sender_lookup = {1: "a@test.com", 2: "b@test.com"}
 
-        result = auto_triage(items, sender_lookup)
-        # Should not be resolved by cluster unanimity (noise skipped)
-        # But could be resolved by sender consistency if same sender
-        # With different senders: remains unresolved
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 0
+        assert result.remaining_count == 2
 
     def test_resolution_has_reason_string(self) -> None:
         items = [
@@ -94,7 +94,7 @@ class TestClusterUnanimity:
         ]
         sender_lookup = {i: "store@shop.com" for i in range(1, 4)}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert len(result.auto_resolved) == 1
         resolution = result.auto_resolved[0]
         assert "cluster" in resolution.reason.lower() or "unanimity" in resolution.reason.lower()
@@ -114,7 +114,7 @@ class TestSenderConsistency:
         ]
         sender_lookup = {1: "news@corp.com", 2: "news@corp.com", 3: "news@corp.com"}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 3
 
     def test_skips_inconsistent_sender(self) -> None:
@@ -125,7 +125,7 @@ class TestSenderConsistency:
         ]
         sender_lookup = {1: "mixed@test.com", 2: "mixed@test.com"}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 0
 
     def test_skips_sender_below_threshold(self) -> None:
@@ -154,7 +154,7 @@ class TestSenderConsistency:
             3: "keeper@corp.com", 4: "keeper@corp.com",
         }
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         assert result.auto_resolved_count == 4
         assert result.remaining_count == 0
 
@@ -162,15 +162,18 @@ class TestSenderConsistency:
 class TestProtectedSafety:
     """Protected emails must never be auto-resolved to trash."""
 
-    def test_protected_blocks_trash_resolution(self) -> None:
+    def test_protected_blocks_trash_cluster_resolution(self) -> None:
+        """Protected item in cluster prevents cluster unanimity for trash.
+        Use same sender so sender pass also sees the protected item."""
         items = [
             _make_classification(1, Tier.TRASH, 0.95, cluster_id=1, cluster_label="spam", protected=True),
             _make_classification(2, Tier.TRASH, 0.95, cluster_id=1, cluster_label="spam"),
         ]
-        sender_lookup = {1: "a@test.com", 2: "b@test.com"}
+        sender_lookup = {1: "same@test.com", 2: "same@test.com"}
 
-        result = auto_triage(items, sender_lookup)
-        # Entire cluster should be skipped because one item is protected
+        result = auto_triage(items, sender_lookup, review_only=False)
+        # Cluster unanimity skipped (protected item in trash cluster)
+        # Sender consistency also skipped (same sender, protected in trash group)
         assert result.auto_resolved_count == 0
 
     def test_protected_allows_non_trash_resolution(self) -> None:
@@ -180,7 +183,7 @@ class TestProtectedSafety:
         ]
         sender_lookup = {1: "store@shop.com", 2: "store@shop.com"}
 
-        result = auto_triage(items, sender_lookup)
+        result = auto_triage(items, sender_lookup, review_only=False)
         # Non-trash resolution with protected is fine
         assert result.auto_resolved_count == 2
 
