@@ -68,28 +68,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-|-|-|
-| SCAN-01 | — | Pending |
-| SCAN-02 | — | Pending |
-| SCAN-03 | — | Pending |
-| SCAN-04 | — | Pending |
-| CSIG-01 | — | Pending |
-| CSIG-02 | — | Pending |
-| CSIG-03 | — | Pending |
-| CSIG-04 | — | Pending |
-| CLAS-01 | — | Pending |
-| CLAS-02 | — | Pending |
-| CLAS-03 | — | Pending |
-| CLAS-04 | — | Pending |
-| EXEC-01 | — | Pending |
-| EXEC-02 | — | Pending |
-| EXEC-03 | — | Pending |
-| EXEC-04 | — | Pending |
+| SCAN-01 | Phase 1 | Pending |
+| SCAN-02 | Phase 1 | Pending |
+| SCAN-03 | Phase 1 | Pending |
+| SCAN-04 | Phase 2 | Pending |
+| CSIG-01 | Phase 1 | Pending |
+| CSIG-02 | Phase 1 | Pending |
+| CSIG-03 | Phase 2 | Pending |
+| CSIG-04 | Phase 2 | Pending |
+| CLAS-01 | Phase 1 | Pending |
+| CLAS-02 | Phase 1 | Pending |
+| CLAS-03 | Phase 1 | Pending |
+| CLAS-04 | Phase 1 | Pending |
+| EXEC-01 | Phase 3 | Pending |
+| EXEC-02 | Phase 3 | Pending |
+| EXEC-03 | Phase 3 | Pending |
+| EXEC-04 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total
-- Mapped to phases: 0
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-04*
-*Last updated: 2026-03-04 after initial definition*
+*Last updated: 2026-03-04 after roadmap creation*
