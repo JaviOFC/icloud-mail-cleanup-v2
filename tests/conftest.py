@@ -51,7 +51,8 @@ def db() -> sqlite3.Connection:
             date_last_viewed INTEGER,
             list_id_hash INTEGER,
             unsubscribe_type INTEGER,
-            automated_conversation INTEGER DEFAULT 0
+            automated_conversation INTEGER DEFAULT 0,
+            summary INTEGER REFERENCES summaries(ROWID)
         );
 
         CREATE TABLE recipients (
@@ -68,6 +69,17 @@ def db() -> sqlite3.Connection:
             model_high_impact INTEGER DEFAULT 0
         );
 
+        CREATE TABLE attachments (
+            ROWID INTEGER PRIMARY KEY,
+            message INTEGER REFERENCES messages(ROWID),
+            name TEXT
+        );
+
+        CREATE TABLE summaries (
+            ROWID INTEGER PRIMARY KEY,
+            summary TEXT
+        );
+
         -- Seed iCloud mailboxes
         INSERT INTO mailboxes (ROWID, url) VALUES
             (1, 'imap://XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/INBOX'),
@@ -75,12 +87,12 @@ def db() -> sqlite3.Connection:
             (3, 'imap://OTHER-UUID/INBOX');
 
         -- Seed addresses
-        INSERT INTO addresses (ROWID, address) VALUES
-            (1, 'alice@example.com'),
-            (2, 'Bob@Example.com'),
-            (3, 'alice@example.com'),
-            (4, 'carol@test.org'),
-            (5, 'dave@other.com');
+        INSERT INTO addresses (ROWID, address, comment) VALUES
+            (1, 'alice@example.com', 'Alice Smith'),
+            (2, 'Bob@Example.com', 'Bob Jones'),
+            (3, 'alice@example.com', 'Alice Smith'),
+            (4, 'carol@test.org', NULL),
+            (5, 'dave@other.com', 'Dave Wilson');
 
         -- Seed subjects
         INSERT INTO subjects (ROWID, subject) VALUES

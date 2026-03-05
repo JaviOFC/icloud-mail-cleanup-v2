@@ -138,6 +138,70 @@ def get_sent_recipients(conn: sqlite3.Connection) -> dict[str, dict]:
     }
 
 
+def get_sender_display_names(conn: sqlite3.Connection) -> dict[str, str]:
+    """Map lowercase sender address to display name from addresses.comment."""
+    query = """
+    SELECT LOWER(address) as addr, comment
+    FROM addresses
+    WHERE comment IS NOT NULL AND comment != ''
+    """
+    cursor = conn.execute(query)
+    result: dict[str, str] = {}
+    for row in cursor:
+        addr = row["addr"]
+        if addr and addr not in result:
+            result[addr] = row["comment"]
+    return result
+
+
+def get_document_attachment_message_ids(conn: sqlite3.Connection) -> set[int]:
+    """Return message ROWIDs that have document attachments.
+
+    Covers PDF, DOC, XLS, ICS, and other document-type extensions.
+    """
+    doc_extensions = (
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv",
+        ".ppt", ".pptx", ".ics", ".vcf", ".zip", ".rar",
+    )
+    query = """
+    SELECT m.ROWID as msg_rowid, LOWER(a.name) as filename
+    FROM messages m
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    JOIN attachments a ON a.message = m.ROWID
+    WHERE mb.url LIKE ?
+      AND a.name IS NOT NULL
+    """
+    cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/%",))
+    result: set[int] = set()
+    for row in cursor:
+        filename = row["filename"]
+        if filename and any(filename.endswith(ext) for ext in doc_extensions):
+            result.add(row["msg_rowid"])
+    return result
+
+
+def load_summaries(conn: sqlite3.Connection) -> dict[int, str]:
+    """Load email summaries from the Envelope Index summaries table.
+
+    Returns {message_id: summary_text} for iCloud messages that have summaries.
+    """
+    query = """
+    SELECT m.message_id, s.summary
+    FROM messages m
+    JOIN summaries s ON m.summary = s.ROWID
+    JOIN mailboxes mb ON m.mailbox = mb.ROWID
+    WHERE mb.url LIKE ?
+      AND s.summary IS NOT NULL
+      AND s.summary != ''
+    """
+    try:
+        cursor = conn.execute(query, (f"imap://{ICLOUD_UUID}/%",))
+        return {row["message_id"]: row["summary"] for row in cursor}
+    except sqlite3.OperationalError:
+        # summaries table may not exist in older Mail versions
+        return {}
+
+
 def get_replied_conversation_ids(conn: sqlite3.Connection) -> set[int]:
     """Get conversation IDs that have messages in the Sent mailbox.
 

@@ -7,6 +7,8 @@ from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
 from icloud_cleanup.tui.screens.review import ReviewScreen
+from icloud_cleanup.tui.screens.execute import ExecuteScreen as ExecuteScreen  # noqa: E501
+from icloud_cleanup.tui.screens.pipeline import PipelineScreen as PipelineScreen  # noqa: E501
 
 
 class PlaceholderScreen(Screen):
@@ -30,20 +32,6 @@ class PlaceholderScreen(Screen):
         yield Header()
         yield Static(self._label, classes="placeholder-label")
         yield Footer()
-
-
-class ExecuteScreen(PlaceholderScreen):
-    """Placeholder -- will be replaced in plan 04-03."""
-
-    def __init__(self) -> None:
-        super().__init__("Execute -- Coming soon...")
-
-
-class PipelineScreen(PlaceholderScreen):
-    """Placeholder -- will be replaced in plan 04-04."""
-
-    def __init__(self) -> None:
-        super().__init__("Pipeline -- Coming soon...")
 
 
 __all__ = ["ReviewScreen", "ExecuteScreen", "PipelineScreen"]

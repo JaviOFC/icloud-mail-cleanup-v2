@@ -15,6 +15,14 @@ class Tier(Enum):
     REVIEW = "review"
 
 
+TIER_COLORS: dict[Tier, str] = {
+    Tier.TRASH: "red",
+    Tier.KEEP_ACTIVE: "green",
+    Tier.KEEP_HISTORICAL: "blue",
+    Tier.REVIEW: "yellow",
+}
+
+
 @dataclass
 class Message:
     """A single email message extracted from the Envelope Index."""

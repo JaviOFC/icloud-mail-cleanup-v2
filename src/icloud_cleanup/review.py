@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from icloud_cleanup.models import Classification, Message, Tier
+from icloud_cleanup.models import TIER_COLORS, Classification, Message, Tier
 
 AUTO_APPROVE_CONFIDENCE_THRESHOLD = 0.98
 
@@ -113,6 +113,8 @@ def _build_cluster_panel(
     msg_index: dict[int, Message],
 ) -> Panel:
     """Build a Rich Panel displaying cluster info for review."""
+    from datetime import datetime
+
     confidences = [c.confidence for c in items]
     item_msgs = [msg_index[c.message_id] for c in items if c.message_id in msg_index]
 
@@ -132,6 +134,14 @@ def _build_cluster_panel(
         if len(subjects) >= 5:
             break
 
+    # Date range
+    dates = [m.date_received for m in item_msgs if m.date_received]
+    date_range_str = ""
+    if dates:
+        earliest = datetime.fromtimestamp(min(dates)).strftime("%b %Y")
+        latest = datetime.fromtimestamp(max(dates)).strftime("%b %Y")
+        date_range_str = f"{earliest} - {latest}" if earliest != latest else earliest
+
     table = Table(show_header=False, show_edge=False, pad_edge=False)
     table.add_column("Field", style="bold")
     table.add_column("Value")
@@ -141,6 +151,8 @@ def _build_cluster_panel(
         "Confidence",
         f"{min(confidences):.2f} - {max(confidences):.2f} (avg {sum(confidences)/len(confidences):.2f})",
     )
+    if date_range_str:
+        table.add_row("Date range", date_range_str)
     table.add_row(
         "Top senders",
         ", ".join(f"{s} ({n})" for s, n in top_senders),
@@ -149,8 +161,9 @@ def _build_cluster_panel(
         label_str = "Subjects" if i == 0 else ""
         table.add_row(label_str, subj[:80])
 
-    tier_str = items[0].tier.value if items else "unknown"
-    return Panel(table, title=f"[cyan]{label}[/cyan] ({tier_str})")
+    tier = items[0].tier if items else Tier.REVIEW
+    color = TIER_COLORS[tier]
+    return Panel(table, title=f"[cyan]{label}[/cyan] ([{color}]{tier.value}[/{color}])")
 
 
 def run_review(
@@ -159,6 +172,7 @@ def run_review(
     session: ReviewSession,
     console: Console | None = None,
     session_path: Path | None = None,
+    summary_lookup: dict[int, str] | None = None,
 ) -> ReviewSession:
     """Interactive cluster-by-cluster review with questionary prompts.
 
@@ -275,6 +289,8 @@ def run_review(
         internal_action = action_map.get(action_lower, action_lower)
 
         if internal_action == "inspect":
+            from datetime import datetime
+
             ts = int(time.time())
             msg_idx = 0
             while msg_idx < len(items):
@@ -284,11 +300,19 @@ def run_review(
                     msg_idx += 1
                     continue
 
-                console.print(
-                    f"\n  [bold]{msg.subject}[/bold]\n"
-                    f"  From: {msg.sender_address}\n"
-                    f"  Tier: {c.tier.value} | Confidence: {c.confidence:.3f}"
-                )
+                tier_color = TIER_COLORS[c.tier]
+                date_str = datetime.fromtimestamp(msg.date_received).strftime("%b %d, %Y") if msg.date_received else "N/A"
+                lines = [
+                    f"\n  [bold]{msg.subject}[/bold]",
+                    f"  From: {msg.sender_address}",
+                    f"  Date: {date_str} | Tier: [{tier_color}]{c.tier.value}[/{tier_color}] | Confidence: {c.confidence:.3f}",
+                ]
+                if summary_lookup and c.message_id in summary_lookup:
+                    snippet = summary_lookup[c.message_id][:200]
+                    lines.append(f"  [dim]Preview: {snippet}[/dim]")
+                if c.signals:
+                    lines.append(f"  [dim]Signals: {c.signals}[/dim]")
+                console.print("\n".join(lines))
                 msg_choices = ["Trash", "Keep"]
                 if msg_idx > 0:
                     msg_choices.append("← Back")

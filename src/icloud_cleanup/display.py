@@ -17,16 +17,9 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from icloud_cleanup.models import Classification, Message, Tier
+from icloud_cleanup.models import TIER_COLORS, Classification, Message, Tier
 
 T = TypeVar("T")
-
-_TIER_COLORS: dict[Tier, str] = {
-    Tier.TRASH: "red",
-    Tier.KEEP_ACTIVE: "green",
-    Tier.KEEP_HISTORICAL: "blue",
-    Tier.REVIEW: "yellow",
-}
 
 
 def _format_size(size_bytes: int) -> str:
@@ -147,7 +140,7 @@ def display_tier_summary(
         count = len(group)
         pct = (count / total * 100) if total > 0 else 0
         avg_conf = sum(c.confidence for c in group) / count if count > 0 else 0
-        color = _TIER_COLORS[tier]
+        color = TIER_COLORS[tier]
         table.add_row(
             f"[{color}]{tier.value}[/{color}]",
             str(count),
@@ -180,7 +173,7 @@ def display_reclassification_summary(
         b = before.get(tier, 0)
         a = after.get(tier, 0)
         delta = a - b
-        color = _TIER_COLORS[tier]
+        color = TIER_COLORS[tier]
         sign = "+" if delta > 0 else ""
         delta_style = "green" if delta > 0 else "red" if delta < 0 else "dim"
         table.add_row(
@@ -249,7 +242,7 @@ def display_top_senders(
             sender_data.items(), key=lambda x: len(x[1]), reverse=True
         )[:10]
 
-        color = _TIER_COLORS[tier]
+        color = TIER_COLORS[tier]
         table = Table(show_header=True)
         table.add_column("Sender", style="cyan", no_wrap=True, max_width=50)
         table.add_column("Count", justify="right")
