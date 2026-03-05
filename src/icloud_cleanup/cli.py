@@ -11,7 +11,7 @@ from pathlib import Path
 from rich.console import Console
 
 from icloud_cleanup.checkpoint import load_checkpoint, merge_checkpoint, save_checkpoint
-from icloud_cleanup.classifier import classify_messages, compute_confidence, compute_signals
+from icloud_cleanup.classifier import classify_messages, classify_single, compute_confidence, compute_signals
 from icloud_cleanup.contacts import (
     build_contact_profiles,
     check_protection_override,
@@ -126,7 +126,10 @@ def cmd_classify(args: argparse.Namespace) -> None:
             console.print(f"Loaded [bold]{len(existing):,}[/bold] existing classifications (incremental mode)\n")
 
         # Step 4: Classify with progress bar
-        classifications = classify_messages(messages, profiles, replied_conv_ids)
+        now = int(time.time())
+        classifications = classify_with_progress(
+            messages, lambda msg: classify_single(msg, profiles, replied_conv_ids, now)
+        )
 
         # Step 5: Merge if incremental
         if existing:

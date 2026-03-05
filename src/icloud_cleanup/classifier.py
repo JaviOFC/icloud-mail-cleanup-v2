@@ -172,6 +172,47 @@ def assign_tier(
     return Tier.REVIEW
 
 
+def classify_single(
+    msg: Message,
+    profiles: dict[str, ContactProfile],
+    replied_conv_ids: set[int],
+    now: int | None = None,
+) -> Classification:
+    """Classify a single message and return a Classification."""
+    if now is None:
+        now = int(time.time())
+
+    addr = msg.sender_address.lower()
+    profile = profiles.get(addr)
+    if profile is None:
+        profile = ContactProfile(
+            address=addr,
+            times_sent_to=0,
+            last_sent_to=None,
+            times_received_from=1,
+            last_received_from=msg.date_received,
+            read_rate=0.0,
+            reply_rate=0.0,
+            flagged_count=0,
+            is_bidirectional=False,
+        )
+
+    signals = compute_signals(msg, profile)
+    confidence, explanation = compute_confidence(signals)
+    protected = is_protected(msg, profile, replied_conv_ids)
+    overridden = check_protection_override(profile) if protected else False
+    tier = assign_tier(confidence, protected, overridden, profile, msg)
+
+    return Classification(
+        message_id=msg.message_id,
+        tier=tier,
+        confidence=confidence,
+        signals=explanation,
+        protected=protected,
+        timestamp=now,
+    )
+
+
 def classify_messages(
     messages: list[Message],
     profiles: dict[str, ContactProfile],
@@ -179,37 +220,4 @@ def classify_messages(
 ) -> list[Classification]:
     """Classify every message and return a list of Classification objects."""
     now = int(time.time())
-    results: list[Classification] = []
-
-    for msg in messages:
-        addr = msg.sender_address.lower()
-        profile = profiles.get(addr)
-        if profile is None:
-            profile = ContactProfile(
-                address=addr,
-                times_sent_to=0,
-                last_sent_to=None,
-                times_received_from=1,
-                last_received_from=msg.date_received,
-                read_rate=0.0,
-                reply_rate=0.0,
-                flagged_count=0,
-                is_bidirectional=False,
-            )
-
-        signals = compute_signals(msg, profile)
-        confidence, explanation = compute_confidence(signals)
-        protected = is_protected(msg, profile, replied_conv_ids)
-        overridden = check_protection_override(profile) if protected else False
-        tier = assign_tier(confidence, protected, overridden, profile, msg)
-
-        results.append(Classification(
-            message_id=msg.message_id,
-            tier=tier,
-            confidence=confidence,
-            signals=explanation,
-            protected=protected,
-            timestamp=now,
-        ))
-
-    return results
+    return [classify_single(msg, profiles, replied_conv_ids, now) for msg in messages]
