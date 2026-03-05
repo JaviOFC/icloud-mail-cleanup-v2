@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
+from pathlib import Path
 
 from tests.helpers import insert_message, insert_recipient
 
 from icloud_cleanup.models import ContactProfile, Message, SignalResult
 from icloud_cleanup.contacts import (
+    SystemContacts,
+    _check_name_match,
     build_contact_profiles,
     check_protection_override,
     extract_behavioral_signals,
     is_protected,
+    load_system_contacts,
 )
 from icloud_cleanup.scanner import (
     get_replied_conversation_ids,
@@ -455,3 +460,190 @@ class TestExtractBehavioralSignals:
         for sig in signals:
             assert isinstance(sig.explanation, str)
             assert len(sig.explanation) > 0
+
+
+def _create_mock_addressbook(base_dir: Path, emails: list[str], names: list[tuple[str, str, str]]) -> None:
+    """Create a mock AddressBook-v22.abcddb at base_dir/SRC1/AddressBook-v22.abcddb.
+
+    names: list of (first, last, email) tuples.
+    """
+    src_dir = base_dir / "SRC1"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    db_path = src_dir / "AddressBook-v22.abcddb"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""CREATE TABLE ZABCDEMAILADDRESS (
+        Z_PK INTEGER PRIMARY KEY,
+        ZOWNER INTEGER,
+        ZADDRESSNORMALIZED TEXT
+    )""")
+    conn.execute("""CREATE TABLE ZABCDRECORD (
+        Z_PK INTEGER PRIMARY KEY,
+        ZFIRSTNAME TEXT,
+        ZLASTNAME TEXT
+    )""")
+    for i, email in enumerate(emails, 1):
+        conn.execute("INSERT INTO ZABCDEMAILADDRESS (Z_PK, ZOWNER, ZADDRESSNORMALIZED) VALUES (?, ?, ?)",
+                      (i, i, email))
+    for i, (first, last, email) in enumerate(names, 1):
+        conn.execute("INSERT OR REPLACE INTO ZABCDRECORD (Z_PK, ZFIRSTNAME, ZLASTNAME) VALUES (?, ?, ?)",
+                      (i, first, last))
+    conn.commit()
+    conn.close()
+
+
+class TestLoadSystemContacts:
+    """Tests for load_system_contacts()."""
+
+    def test_returns_empty_when_no_dir(self, tmp_path):
+        """Returns empty SystemContacts when directory doesn't exist."""
+        result = load_system_contacts({}, addressbook_dir=tmp_path / "nonexistent")
+        assert result.emails == set()
+        assert result.names == set()
+        assert result.own_names == set()
+
+    def test_loads_emails_from_mock_db(self, tmp_path):
+        """Loads emails from a mock AddressBook database."""
+        _create_mock_addressbook(
+            tmp_path,
+            emails=["alice@example.com", "bob@test.com"],
+            names=[("Alice", "Smith", "alice@example.com"), ("Bob", "Jones", "bob@test.com")],
+        )
+        result = load_system_contacts({}, addressbook_dir=tmp_path)
+        assert "alice@example.com" in result.emails
+        assert "bob@test.com" in result.emails
+
+    def test_loads_name_pairs(self, tmp_path):
+        """Loads (first, last) name pairs from contact records."""
+        _create_mock_addressbook(
+            tmp_path,
+            emails=["alice@example.com"],
+            names=[("Alice", "Smith", "alice@example.com")],
+        )
+        result = load_system_contacts({}, addressbook_dir=tmp_path)
+        assert ("alice", "smith") in result.names
+
+    def test_detects_own_names(self, tmp_path):
+        """Detects own names when contact email overlaps with sent_recipients."""
+        _create_mock_addressbook(
+            tmp_path,
+            emails=["me@example.com"],
+            names=[("Javi", "Lopez", "me@example.com")],
+        )
+        sent = {"me@example.com": {"times_sent_to": 1, "last_sent_to": 1700000000}}
+        result = load_system_contacts(sent, addressbook_dir=tmp_path)
+        assert ("javi", "lopez") in result.own_names
+
+    def test_filters_short_names(self, tmp_path):
+        """Names with first or last < 2 chars are excluded."""
+        _create_mock_addressbook(
+            tmp_path,
+            emails=["j@example.com"],
+            names=[("J", "L", "j@example.com")],
+        )
+        result = load_system_contacts({}, addressbook_dir=tmp_path)
+        assert len(result.names) == 0
+
+
+class TestBuildContactProfilesSystemContacts:
+    """Tests for build_contact_profiles() with system contacts integration."""
+
+    def test_exact_email_match_sets_in_system_contacts(self):
+        """Sender email in system_contacts.emails sets in_system_contacts=True."""
+        messages = [_make_message(sender_address="alice@example.com")]
+        sc = SystemContacts(emails={"alice@example.com"}, names=set(), own_names=set())
+        profiles = build_contact_profiles(messages, {}, set(), sc, {})
+        assert profiles["alice@example.com"].in_system_contacts is True
+
+    def test_non_matching_email_leaves_flag_false(self):
+        """Sender email NOT in system_contacts.emails keeps in_system_contacts=False."""
+        messages = [_make_message(sender_address="stranger@unknown.com")]
+        sc = SystemContacts(emails={"alice@example.com"}, names=set(), own_names=set())
+        profiles = build_contact_profiles(messages, {}, set(), sc, {})
+        assert profiles["stranger@unknown.com"].in_system_contacts is False
+
+    def test_name_match_sets_name_matched_contact(self):
+        """Display name matching a contact name sets name_matched_contact=True."""
+        messages = [_make_message(sender_address="larry@personal.com")]
+        sc = SystemContacts(
+            emails=set(),
+            names={("larry", "richter")},
+            own_names=set(),
+        )
+        display_names = {"larry@personal.com": "Larry Richter"}
+        profiles = build_contact_profiles(messages, {}, set(), sc, display_names)
+        assert profiles["larry@personal.com"].name_matched_contact is True
+
+    def test_name_match_skips_via_proxy(self):
+        """Display name with ' via ' is excluded from name matching."""
+        messages = [_make_message(sender_address="notify@proxy.com")]
+        sc = SystemContacts(
+            emails=set(),
+            names={("larry", "richter")},
+            own_names=set(),
+        )
+        display_names = {"notify@proxy.com": "Larry Richter via ProxyService"}
+        profiles = build_contact_profiles(messages, {}, set(), sc, display_names)
+        assert profiles["notify@proxy.com"].name_matched_contact is False
+
+    def test_name_match_skips_service_domains(self):
+        """Senders from service domains are excluded from name matching."""
+        messages = [_make_message(sender_address="larry@amazon.com")]
+        sc = SystemContacts(
+            emails=set(),
+            names={("larry", "richter")},
+            own_names=set(),
+        )
+        display_names = {"larry@amazon.com": "Larry Richter"}
+        profiles = build_contact_profiles(messages, {}, set(), sc, display_names)
+        assert profiles["larry@amazon.com"].name_matched_contact is False
+
+    def test_name_match_skips_own_names(self):
+        """Own names are excluded from name matching."""
+        messages = [_make_message(sender_address="me@somewhere.com")]
+        sc = SystemContacts(
+            emails=set(),
+            names={("javi", "lopez")},
+            own_names={("javi", "lopez")},
+        )
+        display_names = {"me@somewhere.com": "Javi Lopez"}
+        profiles = build_contact_profiles(messages, {}, set(), sc, display_names)
+        assert profiles["me@somewhere.com"].name_matched_contact is False
+
+    def test_exact_match_skips_name_matching(self):
+        """If email is an exact match, name matching is not attempted."""
+        messages = [_make_message(sender_address="alice@example.com")]
+        sc = SystemContacts(
+            emails={"alice@example.com"},
+            names={("alice", "smith")},
+            own_names=set(),
+        )
+        display_names = {"alice@example.com": "Alice Smith"}
+        profiles = build_contact_profiles(messages, {}, set(), sc, display_names)
+        assert profiles["alice@example.com"].in_system_contacts is True
+        assert profiles["alice@example.com"].name_matched_contact is False
+
+
+class TestIsProtectedSystemContacts:
+    """Tests for is_protected() with system contacts."""
+
+    def test_system_contact_is_protected(self):
+        """is_protected returns True when in_system_contacts is True."""
+        msg = _make_message()
+        profile = ContactProfile(
+            address="alice@example.com", times_sent_to=0, last_sent_to=None,
+            times_received_from=5, last_received_from=1700100000,
+            read_rate=0.5, reply_rate=0.0, flagged_count=0,
+            is_bidirectional=False, in_system_contacts=True,
+        )
+        assert is_protected(msg, profile, set()) is True
+
+    def test_name_matched_not_protected(self):
+        """is_protected returns False for name_matched_contact only (no other protection)."""
+        msg = _make_message(conversation_id=99, flags=0)
+        profile = ContactProfile(
+            address="larry@personal.com", times_sent_to=0, last_sent_to=None,
+            times_received_from=5, last_received_from=1700100000,
+            read_rate=0.5, reply_rate=0.0, flagged_count=0,
+            is_bidirectional=False, name_matched_contact=True,
+        )
+        assert is_protected(msg, profile, set()) is False

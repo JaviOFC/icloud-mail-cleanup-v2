@@ -17,14 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from icloud_cleanup.models import Classification, Message, Tier
-
-_TIER_COLORS: dict[Tier, str] = {
-    Tier.TRASH: "red",
-    Tier.KEEP_ACTIVE: "green",
-    Tier.KEEP_HISTORICAL: "blue",
-    Tier.REVIEW: "yellow",
-}
+from icloud_cleanup.models import TIER_COLORS, Classification, Message, Tier
 
 _TIER_ORDER = [Tier.TRASH, Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL, Tier.REVIEW]
 
@@ -191,7 +184,7 @@ def render_terminal_report(report_data: dict, console: Console | None = None) ->
         td = report_data["tiers"][tier.value]
         if td["count"] == 0:
             continue
-        color = _TIER_COLORS[tier]
+        color = TIER_COLORS[tier]
         conf = td["confidence"]
         summary.add_row(
             f"[{color}]{tier.value}[/{color}]",
@@ -208,7 +201,7 @@ def render_terminal_report(report_data: dict, console: Console | None = None) ->
         if not td["clusters"]:
             continue
 
-        color = _TIER_COLORS[tier]
+        color = TIER_COLORS[tier]
         cluster_table = Table(show_header=True)
         cluster_table.add_column("Cluster", style="cyan", max_width=30)
         cluster_table.add_column("Count", justify="right")

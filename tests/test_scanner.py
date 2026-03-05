@@ -12,6 +12,7 @@ from icloud_cleanup.scanner import (
     get_replied_conversation_ids,
     get_sender_stats,
     get_sent_recipients,
+    load_summaries,
     open_db,
     scan_messages,
 )
@@ -292,3 +293,72 @@ class TestGetRepliedConversationIds:
                         conversation_id=10, date_received=1700300000)
         result = get_replied_conversation_ids(db)
         assert result == {10, 20}
+
+
+class TestLoadSummaries:
+    def _seed(self, db: sqlite3.Connection) -> None:
+        # Insert summaries
+        db.execute("INSERT INTO summaries (ROWID, summary) VALUES (1, 'Thank you for your payment')")
+        db.execute("INSERT INTO summaries (ROWID, summary) VALUES (2, 'Meeting notes from Tuesday')")
+        db.execute("INSERT INTO summaries (ROWID, summary) VALUES (3, '')")  # empty summary
+
+        # Messages with summaries
+        insert_message(db, rowid=1, message_id=101, mailbox=1, sender=1,
+                        size=2000, date_received=1700000000)
+        db.execute("UPDATE messages SET summary = 1 WHERE ROWID = 1")
+
+        insert_message(db, rowid=2, message_id=102, mailbox=1, sender=2,
+                        size=3000, date_received=1700100000)
+        db.execute("UPDATE messages SET summary = 2 WHERE ROWID = 2")
+
+        # Message with empty summary (should be excluded)
+        insert_message(db, rowid=3, message_id=103, mailbox=1, sender=1,
+                        size=1500, date_received=1700200000)
+        db.execute("UPDATE messages SET summary = 3 WHERE ROWID = 3")
+
+        # Message without summary
+        insert_message(db, rowid=4, message_id=104, mailbox=1, sender=4,
+                        size=500, date_received=1700300000)
+
+        # Non-iCloud message with summary (should be excluded)
+        insert_message(db, rowid=5, message_id=105, mailbox=3, sender=1,
+                        size=2000, date_received=1700000000)
+        db.execute("UPDATE messages SET summary = 1 WHERE ROWID = 5")
+
+    def test_returns_dict(self, db: sqlite3.Connection):
+        self._seed(db)
+        result = load_summaries(db)
+        assert isinstance(result, dict)
+
+    def test_loads_non_empty_summaries(self, db: sqlite3.Connection):
+        self._seed(db)
+        result = load_summaries(db)
+        assert 101 in result
+        assert result[101] == "Thank you for your payment"
+        assert 102 in result
+        assert result[102] == "Meeting notes from Tuesday"
+
+    def test_excludes_empty_summaries(self, db: sqlite3.Connection):
+        self._seed(db)
+        result = load_summaries(db)
+        assert 103 not in result
+
+    def test_excludes_messages_without_summary(self, db: sqlite3.Connection):
+        self._seed(db)
+        result = load_summaries(db)
+        assert 104 not in result
+
+    def test_excludes_non_icloud_messages(self, db: sqlite3.Connection):
+        self._seed(db)
+        result = load_summaries(db)
+        assert 105 not in result
+
+    def test_graceful_without_summaries_table(self, tmp_path):
+        """Returns empty dict if summaries table doesn't exist."""
+        db_path = tmp_path / "nosummaries.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE messages (ROWID INTEGER PRIMARY KEY, message_id INTEGER)")
+        result = load_summaries(conn)
+        assert result == {}
+        conn.close()

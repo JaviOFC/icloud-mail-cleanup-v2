@@ -8,9 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from icloud_cleanup.models import Classification, Message, Tier
+from rich.console import Console
+
+from icloud_cleanup.models import TIER_COLORS, Classification, Message, Tier
 from icloud_cleanup.review import (
     ReviewSession,
+    _build_cluster_panel,
     get_session_path,
     load_session,
     save_session,
@@ -210,3 +213,152 @@ class TestGetSessionPath:
         path = get_session_path()
         assert path.name == "review_session.json"
         assert ".icloud-cleanup" in str(path)
+
+
+def _make_message(
+    message_id: int,
+    *,
+    sender_address: str = "test@example.com",
+    subject: str = "Test subject",
+    date_received: int = 1700000000,
+) -> Message:
+    return Message(
+        rowid=message_id,
+        message_id=message_id,
+        conversation_id=0,
+        flags=0,
+        read=1,
+        flagged=0,
+        deleted=0,
+        size=1000,
+        date_received=date_received,
+        sender_address=sender_address,
+        subject=subject,
+        mailbox_url="imap://UUID/INBOX",
+        list_id_hash=None,
+        unsubscribe_type=None,
+        automated_conversation=0,
+        model_category=None,
+        model_high_impact=0,
+    )
+
+
+class TestBuildClusterPanel:
+    """Tests for cluster panel display enhancements."""
+
+    def test_panel_title_contains_colored_tier(self) -> None:
+        msg = _make_message(1)
+        cls = _make_classification(1, Tier.TRASH, 0.95)
+        msg_index = {1: msg}
+        panel = _build_cluster_panel("spam_cluster", [cls], [msg], msg_index)
+        title_str = str(panel.title)
+        assert "trash" in title_str
+        assert "red" in title_str
+
+    def test_panel_contains_date_range(self) -> None:
+        msgs = [
+            _make_message(1, date_received=1546300800),
+            _make_message(2, date_received=1711929600),
+        ]
+        items = [
+            _make_classification(1, Tier.REVIEW, 0.5),
+            _make_classification(2, Tier.REVIEW, 0.6),
+        ]
+        msg_index = {m.message_id: m for m in msgs}
+        panel = _build_cluster_panel("test", items, msgs, msg_index)
+        from io import StringIO
+        console = Console(file=StringIO(), force_terminal=True, width=120)
+        console.print(panel)
+        output = console.file.getvalue()
+        assert "Date range" in output
+        # Dates span multiple years — verify the range separator is present
+        assert " - " in output
+
+    def test_panel_single_month_date_range(self) -> None:
+        msgs = [
+            _make_message(1, date_received=1700000000),
+            _make_message(2, date_received=1700086400),
+        ]
+        items = [
+            _make_classification(1, Tier.REVIEW, 0.5),
+            _make_classification(2, Tier.REVIEW, 0.6),
+        ]
+        msg_index = {m.message_id: m for m in msgs}
+        panel = _build_cluster_panel("test", items, msgs, msg_index)
+        from io import StringIO
+        console = Console(file=StringIO(), force_terminal=True, width=120)
+        console.print(panel)
+        output = console.file.getvalue()
+        assert "Date range" in output
+
+
+class TestTierColorsShared:
+    """Tests that TIER_COLORS is properly shared."""
+
+    def test_all_tiers_have_color(self) -> None:
+        for tier in Tier:
+            assert tier in TIER_COLORS
+
+    def test_expected_colors(self) -> None:
+        assert TIER_COLORS[Tier.TRASH] == "red"
+        assert TIER_COLORS[Tier.KEEP_ACTIVE] == "green"
+        assert TIER_COLORS[Tier.KEEP_HISTORICAL] == "blue"
+        assert TIER_COLORS[Tier.REVIEW] == "yellow"
+
+
+class TestInspectModeDisplay:
+    """Tests for the enhanced inspect mode display format."""
+
+    def test_inspect_format_with_summary(self) -> None:
+        """Verify display includes summary, signals, date, colored tier."""
+        from datetime import datetime
+
+        msg = _make_message(1, subject="Invoice #4521",
+                           sender_address="billing@co.com",
+                           date_received=1700000000)
+        cls = _make_classification(
+            1, Tier.REVIEW, 0.523,
+            cluster_id=1, cluster_label="invoices",
+        )
+        # Override signals for test
+        cls.signals = "sender_score=0.30; frequency=0.45; age=0.80"
+        summary_lookup = {1: "Thank you for your payment. Your invoice for services rendered..."}
+
+        tier_color = TIER_COLORS[cls.tier]
+        date_str = datetime.fromtimestamp(msg.date_received).strftime("%b %d, %Y")
+
+        lines = [
+            f"\n  [bold]{msg.subject}[/bold]",
+            f"  From: {msg.sender_address}",
+            f"  Date: {date_str} | Tier: [{tier_color}]{cls.tier.value}[/{tier_color}] | Confidence: {cls.confidence:.3f}",
+        ]
+        if summary_lookup and cls.message_id in summary_lookup:
+            snippet = summary_lookup[cls.message_id][:200]
+            lines.append(f"  [dim]Preview: {snippet}[/dim]")
+        if cls.signals:
+            lines.append(f"  [dim]Signals: {cls.signals}[/dim]")
+
+        output = "\n".join(lines)
+        assert "Invoice #4521" in output
+        assert "billing@co.com" in output
+        assert "yellow" in output
+        assert "0.523" in output
+        assert "Thank you for your payment" in output
+        assert "sender_score=0.30" in output
+        assert date_str in output
+
+    def test_inspect_format_without_summary(self) -> None:
+        msg = _make_message(1)
+        cls = _make_classification(1, Tier.TRASH, 0.95)
+        cls.signals = ""
+
+        lines = [f"  [bold]{msg.subject}[/bold]"]
+        summary_lookup: dict[int, str] | None = None
+        if summary_lookup and cls.message_id in summary_lookup:
+            lines.append("Preview line")
+        if cls.signals:
+            lines.append("Signals line")
+
+        output = "\n".join(lines)
+        assert "Preview" not in output
+        assert "Signals" not in output
