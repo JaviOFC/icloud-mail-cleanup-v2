@@ -5,7 +5,7 @@ milestone_name: milestone
 status: "Full pipeline operational: scan, classify, analyze, report, review, execute. 348 tests passing."
 stopped_at: Completed quick-1-PLAN.md
 last_updated: "2026-03-05T19:47:45.152Z"
-last_activity: 2026-03-05 -- Completed 03-04 (e2e verification, Phase 3 complete)
+last_activity: 2026-03-05 - Completed quick task 1: scan project and update readme
 progress:
   total_phases: 4
   completed_phases: 3
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 Phase: 3 of 3 (Report, Review + Safe Execution) — COMPLETE
 Plan: 4 of 4 in current phase — All plans done, user-verified on real data
 Status: Full pipeline operational: scan, classify, analyze, report, review, execute. 348 tests passing.
-Last activity: 2026-03-05 -- Completed 03-04 (e2e verification, Phase 3 complete)
+Last activity: 2026-03-05 - Completed quick task 1: scan project and update readme
 
 Progress: [██████████] 100%
 
@@ -108,6 +108,12 @@ None yet.
 - [Phase 2]: mlx-embeddings 0.0.5 API is unstable -- needs local validation before writing ContentEmbedder
 - [Phase 2]: ModernBERT compatibility with mlx-embeddings untested -- MiniLM fallback available
 - [Phase 3]: ~~AppleScript message ID to SQLite ROWID mapping is undocumented~~ RESOLVED: ROWID == AppleScript `id` property (confirmed in 03-RESEARCH.md)
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | scan project and update readme | 2026-03-05 | 6c0d66b | [1-scan-project-and-update-readme](./quick/1-scan-project-and-update-readme/) |
 
 ## Session Continuity
 
