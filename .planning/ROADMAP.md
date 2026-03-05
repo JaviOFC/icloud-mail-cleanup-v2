@@ -44,11 +44,12 @@ Plans:
   1. The tool parses .emlx files from disk and extracts plain-text body content for emails that Phase 1 classified as Review/ambiguous
   2. MLX embeddings are generated on M1 Max GPU and emails are clustered semantically across senders (e.g., all shipping notifications grouped together regardless of sender)
   3. The fused classification (metadata + content signals) reclassifies previously-ambiguous emails, reducing the Review tier to a small fraction of total emails
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Install dependencies, extend Classification model with content fields, EMLX parser (ROWID lookup, body extraction, HTML stripping)
+- [ ] 02-02-PLAN.md -- MLX batch embedding generator with model fallback, HDBSCAN clusterer with TF-IDF labeling and content score derivation
+- [ ] 02-03-PLAN.md -- Fused classification engine (metadata + content blending, reclassification rules), CLI analyze subcommand, end-to-end verification
 
 ### Phase 3: Report, Review + Safe Execution
 **Goal**: Users can review classification results interactively and execute approved deletions safely with full reversibility
@@ -73,5 +74,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
-| 2. Content Analysis + Full Classification | 0/2 | Not started | - |
+| 2. Content Analysis + Full Classification | 0/3 | Not started | - |
 | 3. Report, Review + Safe Execution | 0/2 | Not started | - |
