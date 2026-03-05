@@ -16,9 +16,12 @@ from icloud_cleanup.contacts import (
     build_contact_profiles,
     check_protection_override,
     is_protected,
+    load_system_contacts,
 )
 from icloud_cleanup.display import (
     classify_with_progress,
+    display_cluster_summary,
+    display_reclassification_summary,
     display_scan_stats,
     display_tier_summary,
     display_top_senders,
@@ -26,7 +29,9 @@ from icloud_cleanup.display import (
 )
 from icloud_cleanup.models import Classification, ContactProfile, Message, Tier
 from icloud_cleanup.scanner import (
+    get_document_attachment_message_ids,
     get_replied_conversation_ids,
+    get_sender_display_names,
     get_sender_stats,
     get_sent_recipients,
     open_db,
@@ -83,6 +88,18 @@ def create_parser() -> argparse.ArgumentParser:
     )
     classify_parser.set_defaults(func=cmd_classify)
 
+    # analyze
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="Run Phase 2 content analysis pipeline",
+    )
+    analyze_parser.add_argument(
+        "--mail-dir",
+        type=Path,
+        default=None,
+        help="Override Mail V10 directory (default: ~/Library/Mail/V10)",
+    )
+    analyze_parser.set_defaults(func=cmd_analyze)
+
     # report
     report_parser = subparsers.add_parser("report", help="Display classification report")
     report_parser.set_defaults(func=cmd_report)
@@ -112,12 +129,32 @@ def cmd_classify(args: argparse.Namespace) -> None:
         messages = scan_messages(conn)
         console.print(f"Found [bold]{len(messages):,}[/bold] messages\n")
 
-        # Step 2: Build contact profiles
-        console.print("[bold]Building contact profiles...[/bold]")
+        # Step 2: Load system contacts and build profiles
+        console.print("[bold]Loading system contacts...[/bold]")
         sent_recipients = get_sent_recipients(conn)
         replied_conv_ids = get_replied_conversation_ids(conn)
-        profiles = build_contact_profiles(messages, sent_recipients, replied_conv_ids)
+        system_contacts = load_system_contacts(sent_recipients)
+        console.print(f"Loaded [bold]{len(system_contacts.emails):,}[/bold] system contacts "
+                      f"([bold]{len(system_contacts.names):,}[/bold] with names)\n")
+
+        console.print("[bold]Building contact profiles...[/bold]")
+        sender_display_names = get_sender_display_names(conn)
+        profiles = build_contact_profiles(
+            messages, sent_recipients, replied_conv_ids,
+            system_contacts, sender_display_names,
+        )
         console.print(f"Built [bold]{len(profiles):,}[/bold] sender profiles\n")
+
+        # Step 2b: Flag document attachments
+        doc_msg_ids = get_document_attachment_message_ids(conn)
+        if doc_msg_ids:
+            msg_rowid_map = {m.rowid: m for m in messages}
+            flagged_count = 0
+            for rowid in doc_msg_ids:
+                if rowid in msg_rowid_map:
+                    msg_rowid_map[rowid].has_document_attachment = True
+                    flagged_count += 1
+            console.print(f"Flagged [bold]{flagged_count:,}[/bold] messages with document attachments\n")
 
         # Step 3: Check for incremental mode
         existing: dict[int, Classification] = {}
@@ -149,6 +186,222 @@ def cmd_classify(args: argparse.Namespace) -> None:
 
     finally:
         conn.close()
+
+
+def cmd_analyze(args: argparse.Namespace) -> None:
+    """Execute the analyze subcommand: Phase 2 content analysis pipeline.
+
+    Orchestrates: load checkpoint -> parse .emlx bodies -> embed ->
+    cluster -> reclassify -> save updated checkpoint.
+    """
+    from collections import Counter
+
+    from rich.progress import (
+        BarColumn,
+        MofNCompleteColumn,
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        TimeRemainingColumn,
+    )
+
+    from icloud_cleanup.classifier import reclassify_with_content
+    from icloud_cleanup.clusterer import cluster_embeddings, derive_content_scores, label_clusters
+    from icloud_cleanup.embedder import batch_embed, load_embedding_model
+    from icloud_cleanup.emlx_parser import build_emlx_lookup, parse_emlx_body
+    from icloud_cleanup.scanner import ICLOUD_UUID
+
+    mail_dir = args.mail_dir or Path.home() / "Library/Mail/V10"
+
+    # Step 1: Load Phase 1 checkpoint
+    console.print("[bold]Step 1: Loading Phase 1 checkpoint...[/bold]")
+    existing = load_checkpoint(args.checkpoint)
+    if not existing:
+        console.print("[red]No checkpoint found. Run 'classify' first to create Phase 1 checkpoint.[/red]")
+        sys.exit(1)
+    console.print(f"Loaded [bold]{len(existing):,}[/bold] classifications\n")
+
+    # Record before-state for comparison
+    before_counts: dict[Tier, int] = Counter()
+    for c in existing.values():
+        before_counts[c.tier] += 1
+
+    # Load messages from DB for ROWID mapping + profiles for reclassification
+    conn = open_db(args.db)
+    try:
+        console.print("[bold]Loading messages and profiles...[/bold]")
+        messages = scan_messages(conn)
+        msg_by_id: dict[int, Message] = {m.message_id: m for m in messages}
+        msg_by_rowid: dict[int, Message] = {m.rowid: m for m in messages}
+
+        sent_recipients = get_sent_recipients(conn)
+        replied_conv_ids = get_replied_conversation_ids(conn)
+        system_contacts = load_system_contacts(sent_recipients)
+        sender_display_names = get_sender_display_names(conn)
+        profiles = build_contact_profiles(
+            messages, sent_recipients, replied_conv_ids,
+            system_contacts, sender_display_names,
+        )
+
+        # Flag document attachments
+        doc_msg_ids = get_document_attachment_message_ids(conn)
+        if doc_msg_ids:
+            for rowid in doc_msg_ids:
+                if rowid in msg_by_rowid:
+                    msg_by_rowid[rowid].has_document_attachment = True
+
+        console.print(f"  Messages: [bold]{len(messages):,}[/bold], "
+                      f"Profiles: [bold]{len(profiles):,}[/bold]\n")
+    finally:
+        conn.close()
+
+    # Step 2: Build EMLX lookup and extract bodies
+    console.print("[bold]Step 2: Extracting email bodies from .emlx files...[/bold]")
+    emlx_lookup = build_emlx_lookup(mail_dir, ICLOUD_UUID)
+    console.print(f"  Found [bold]{len(emlx_lookup):,}[/bold] .emlx files on disk\n")
+
+    # Build ordered list of (message_id, text, content_source) aligned with checkpoint
+    ordered_msg_ids: list[int] = []
+    texts: list[str] = []
+    content_sources: list[str] = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeRemainingColumn(),
+    ) as progress:
+        task = progress.add_task("Parsing bodies...", total=len(existing))
+        for msg_id, cls in existing.items():
+            msg = msg_by_id.get(msg_id)
+            if msg is None:
+                # No matching message in DB -- skip
+                progress.advance(task)
+                continue
+
+            body_text = None
+            emlx_path = emlx_lookup.get(msg.rowid)
+            if emlx_path is not None:
+                body_text = parse_emlx_body(emlx_path)
+
+            if body_text:
+                texts.append(body_text)
+                content_sources.append("body")
+            else:
+                texts.append(msg.subject)
+                content_sources.append("subject_only")
+            ordered_msg_ids.append(msg_id)
+            progress.advance(task)
+
+    body_count = sum(1 for s in content_sources if s == "body")
+    subj_count = sum(1 for s in content_sources if s == "subject_only")
+    console.print(f"  Parsed: [bold]{body_count:,}[/bold] bodies, "
+                  f"[bold]{subj_count:,}[/bold] subject-only fallbacks\n")
+
+    # Step 3: Generate embeddings
+    console.print("[bold]Step 3: Generating embeddings (MLX GPU)...[/bold]")
+    model, tokenizer, model_name = load_embedding_model()
+    console.print(f"  Model: [bold]{model_name}[/bold]")
+
+    embeddings = batch_embed(texts, model, tokenizer, model_name)
+    console.print(f"  Embeddings: [bold]{embeddings.shape}[/bold]\n")
+
+    # Step 4: Cluster and label
+    console.print("[bold]Step 4: Clustering embeddings...[/bold]")
+    existing_tiers = [existing[mid].tier for mid in ordered_msg_ids]
+    labels = cluster_embeddings(embeddings)
+
+    n_clusters = len(set(labels) - {-1})
+    noise_count = int((labels == -1).sum())
+    noise_pct = noise_count / len(labels) * 100 if len(labels) > 0 else 0
+    console.print(f"  Clusters: [bold]{n_clusters}[/bold], "
+                  f"Noise: [bold]{noise_count:,}[/bold] ({noise_pct:.1f}%)\n")
+
+    cluster_labels_map = label_clusters(texts, labels)
+    content_scores = derive_content_scores(labels, existing_tiers)
+
+    # Build cluster size map for display
+    cluster_sizes: dict[int, int] = Counter()
+    for lbl in labels:
+        if lbl != -1:
+            cluster_sizes[int(lbl)] += 1
+
+    display_cluster_summary(cluster_labels_map, cluster_sizes, console=console)
+    console.print()
+
+    # Step 5: Reclassify
+    console.print("[bold]Step 5: Reclassifying with fused scores...[/bold]")
+    updated_classifications: list[Classification] = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeRemainingColumn(),
+    ) as progress:
+        task = progress.add_task("Reclassifying...", total=len(ordered_msg_ids))
+        for idx, msg_id in enumerate(ordered_msg_ids):
+            cls = existing[msg_id]
+            msg = msg_by_id.get(msg_id)
+            if msg is None:
+                updated_classifications.append(cls)
+                progress.advance(task)
+                continue
+
+            addr = msg.sender_address.lower()
+            profile = profiles.get(addr)
+            if profile is None:
+                profile = ContactProfile(
+                    address=addr,
+                    times_sent_to=0,
+                    last_sent_to=None,
+                    times_received_from=1,
+                    last_received_from=msg.date_received,
+                    read_rate=0.0,
+                    reply_rate=0.0,
+                    flagged_count=0,
+                    is_bidirectional=False,
+                )
+
+            c_score = content_scores.get(idx, 0.5)
+            c_label_int = int(labels[idx])
+            c_label_str = ", ".join(cluster_labels_map.get(c_label_int, [])) or "noise"
+
+            new_cls = reclassify_with_content(
+                classification=cls,
+                content_score=c_score,
+                cluster_id=c_label_int,
+                cluster_label=c_label_str,
+                content_source=content_sources[idx],
+                profile=profile,
+                message=msg,
+                replied_conv_ids=replied_conv_ids,
+            )
+            updated_classifications.append(new_cls)
+            progress.advance(task)
+
+    # Also include any classifications not in ordered_msg_ids (no matching message)
+    processed_ids = set(ordered_msg_ids)
+    for msg_id, cls in existing.items():
+        if msg_id not in processed_ids:
+            updated_classifications.append(cls)
+
+    # Step 6: Save and report
+    console.print("\n[bold]Step 6: Saving updated checkpoint...[/bold]")
+    args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    save_checkpoint(updated_classifications, args.checkpoint)
+    console.print(f"  Saved [bold]{len(updated_classifications):,}[/bold] classifications to {args.checkpoint}\n")
+
+    # After counts
+    after_counts: dict[Tier, int] = Counter()
+    for c in updated_classifications:
+        after_counts[c.tier] += 1
+
+    display_reclassification_summary(before_counts, after_counts, console=console)
+    console.print()
+    display_tier_summary(updated_classifications, console=console)
 
 
 def _debug_sender_scores(

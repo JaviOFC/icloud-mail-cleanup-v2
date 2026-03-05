@@ -162,6 +162,64 @@ def display_tier_summary(
     console.print(table)
 
 
+def display_reclassification_summary(
+    before: dict[Tier, int],
+    after: dict[Tier, int],
+    console: Console | None = None,
+) -> None:
+    """Show tier distribution before and after content reclassification."""
+    console = console or Console()
+
+    table = Table(title="Reclassification Summary (Before -> After)")
+    table.add_column("Tier", style="bold")
+    table.add_column("Before", justify="right")
+    table.add_column("After", justify="right")
+    table.add_column("Change", justify="right")
+
+    for tier in Tier:
+        b = before.get(tier, 0)
+        a = after.get(tier, 0)
+        delta = a - b
+        color = _TIER_COLORS[tier]
+        sign = "+" if delta > 0 else ""
+        delta_style = "green" if delta > 0 else "red" if delta < 0 else "dim"
+        table.add_row(
+            f"[{color}]{tier.value}[/{color}]",
+            str(b),
+            str(a),
+            f"[{delta_style}]{sign}{delta}[/{delta_style}]",
+        )
+
+    console.print(table)
+
+
+def display_cluster_summary(
+    cluster_labels: dict[int, list[str]],
+    cluster_sizes: dict[int, int],
+    console: Console | None = None,
+) -> None:
+    """Show top clusters with their labels and sizes."""
+    console = console or Console()
+
+    sorted_clusters = sorted(cluster_sizes.items(), key=lambda x: x[1], reverse=True)
+
+    table = Table(title="Cluster Summary (Top 20)")
+    table.add_column("ID", justify="right")
+    table.add_column("Size", justify="right")
+    table.add_column("Labels")
+
+    for cid, size in sorted_clusters[:20]:
+        labels = cluster_labels.get(cid, [])
+        label_str = ", ".join(labels) if labels else "(no labels)"
+        table.add_row(str(cid), str(size), label_str)
+
+    total_clustered = sum(cluster_sizes.values())
+    table.add_section()
+    table.add_row("[bold]Total", f"[bold]{total_clustered}", "")
+
+    console.print(table)
+
+
 def display_top_senders(
     classifications: list[Classification],
     messages: list[Message],
