@@ -20,7 +20,6 @@ from icloud_cleanup.classifier import (
     FLAGGED_WEIGHT,
     FREQUENCY_WEIGHT,
     KEEP_THRESHOLD,
-    READ_RATE_WEIGHT,
     RECENCY_WEIGHT,
     REPLY_RATE_WEIGHT,
     TRASH_THRESHOLD,
@@ -50,6 +49,7 @@ def _make_message(
     automated_conversation: int = 0,
     model_category: int | None = None,
     model_high_impact: int = 0,
+    has_document_attachment: bool = False,
 ) -> Message:
     """Create a Message with sensible defaults for testing."""
     return Message(
@@ -70,6 +70,7 @@ def _make_message(
         automated_conversation=automated_conversation,
         model_category=model_category,
         model_high_impact=model_high_impact,
+        has_document_attachment=has_document_attachment,
     )
 
 
@@ -84,6 +85,8 @@ def _make_profile(
     reply_rate: float = 0.1,
     flagged_count: int = 0,
     is_bidirectional: bool = False,
+    in_system_contacts: bool = False,
+    name_matched_contact: bool = False,
 ) -> ContactProfile:
     """Create a ContactProfile with sensible defaults for testing."""
     return ContactProfile(
@@ -96,22 +99,24 @@ def _make_profile(
         reply_rate=reply_rate,
         flagged_count=flagged_count,
         is_bidirectional=is_bidirectional,
+        in_system_contacts=in_system_contacts,
+        name_matched_contact=name_matched_contact,
     )
 
 
 class TestComputeSignals:
     """Tests for compute_signals()."""
 
-    def test_returns_8_signal_results(self):
-        """compute_signals returns exactly 8 SignalResult objects."""
+    def test_returns_7_signal_results(self):
+        """compute_signals returns exactly 7 SignalResult objects (read_rate dropped)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
-        assert len(signals) == 8
+        assert len(signals) == 7
         assert all(isinstance(s, SignalResult) for s in signals)
 
     def test_signal_names_match_spec(self):
-        """All 8 signal names match the research spec."""
+        """All 7 signal names match the spec (read_rate excluded)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
@@ -120,7 +125,6 @@ class TestComputeSignals:
             "contact_score",
             "frequency_score",
             "recency_score",
-            "read_rate_signal",
             "reply_rate_signal",
             "apple_category_signal",
             "automation_signal",
@@ -129,7 +133,7 @@ class TestComputeSignals:
         assert names == expected
 
     def test_signal_weights_match_spec(self):
-        """Signal weights match the research spec constants."""
+        """Signal weights match the spec constants."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
@@ -137,7 +141,6 @@ class TestComputeSignals:
         assert weight_map["contact_score"] == CONTACT_WEIGHT
         assert weight_map["frequency_score"] == FREQUENCY_WEIGHT
         assert weight_map["recency_score"] == RECENCY_WEIGHT
-        assert weight_map["read_rate_signal"] == READ_RATE_WEIGHT
         assert weight_map["reply_rate_signal"] == REPLY_RATE_WEIGHT
         assert weight_map["apple_category_signal"] == APPLE_CATEGORY_WEIGHT
         assert weight_map["automation_signal"] == AUTOMATION_WEIGHT
@@ -167,23 +170,32 @@ class TestComputeSignals:
         contact = next(s for s in signals if s.name == "contact_score")
         assert contact.value == 0.0
 
-    def test_frequency_score_high_volume_low_read(self):
-        """High volume sender with low read rate produces low frequency_score."""
+    def test_frequency_score_bidirectional_high_volume(self):
+        """Bidirectional contact with high volume produces high frequency_score."""
         msg = _make_message()
-        profile = _make_profile(read_rate=0.05, times_received_from=100)
+        profile = _make_profile(is_bidirectional=True, times_sent_to=5, times_received_from=100)
         signals = compute_signals(msg, profile)
         freq = next(s for s in signals if s.name == "frequency_score")
-        # 0.05 * min(1.0, 100/20) = 0.05 * 1.0 = 0.05
-        assert freq.value == pytest.approx(0.05, abs=0.01)
+        # min(1.0, 100/20) = 1.0
+        assert freq.value == pytest.approx(1.0, abs=0.01)
 
-    def test_frequency_score_low_volume_high_read(self):
-        """Low volume sender with high read rate produces moderate frequency_score."""
+    def test_frequency_score_unknown_high_volume_penalized(self):
+        """Unknown sender with high volume gets penalized (newsletter pattern)."""
         msg = _make_message()
-        profile = _make_profile(read_rate=0.9, times_received_from=5)
+        profile = _make_profile(is_bidirectional=False, times_sent_to=0, times_received_from=100)
         signals = compute_signals(msg, profile)
         freq = next(s for s in signals if s.name == "frequency_score")
-        # 0.9 * min(1.0, 5/20) = 0.9 * 0.25 = 0.225
-        assert freq.value == pytest.approx(0.225, abs=0.01)
+        # max(0.0, 1.0 - 100/50) = 0.0
+        assert freq.value == pytest.approx(0.0, abs=0.01)
+
+    def test_frequency_score_unknown_low_volume(self):
+        """Unknown sender with low volume gets moderate frequency_score."""
+        msg = _make_message()
+        profile = _make_profile(is_bidirectional=False, times_sent_to=0, times_received_from=5)
+        signals = compute_signals(msg, profile)
+        freq = next(s for s in signals if s.name == "frequency_score")
+        # max(0.0, 1.0 - 5/50) = 0.9
+        assert freq.value == pytest.approx(0.9, abs=0.01)
 
     def test_recency_score_zero_age(self):
         """Message received just now has recency_score near 1.0."""
@@ -340,12 +352,12 @@ class TestComputeConfidence:
         """Explanation string contains all signal names with their values."""
         signals = [
             SignalResult(name="contact_score", value=0.9, weight=0.3, explanation="t"),
-            SignalResult(name="read_rate_signal", value=0.75, weight=0.15, explanation="t"),
+            SignalResult(name="reply_rate_signal", value=0.75, weight=0.20, explanation="t"),
             SignalResult(name="recency_score", value=0.6, weight=0.15, explanation="t"),
         ]
         _, explanation = compute_confidence(signals)
         assert "contact_score=0.90" in explanation
-        assert "read_rate_signal=0.75" in explanation
+        assert "reply_rate_signal=0.75" in explanation
         assert "recency_score=0.60" in explanation
 
 
@@ -357,7 +369,7 @@ class TestAssignTier:
         now = int(time.time())
         msg = _make_message(date_received=now - 30 * 86400)  # 30 days ago
         profile = _make_profile(
-            read_rate=0.8, reply_rate=0.3,
+            reply_rate=0.3, is_bidirectional=True,
             last_received_from=now - 30 * 86400,
         )
         tier = assign_tier(
@@ -371,7 +383,7 @@ class TestAssignTier:
         now = int(time.time())
         msg = _make_message(date_received=now - 400 * 86400)  # 400 days ago
         profile = _make_profile(
-            read_rate=0.2, reply_rate=0.0,
+            reply_rate=0.0, is_bidirectional=False,
             last_received_from=now - 400 * 86400,
         )
         tier = assign_tier(
@@ -393,23 +405,23 @@ class TestAssignTier:
         assert tier != Tier.TRASH
 
     def test_protected_overridden_high_trash_confidence_trash(self):
-        """Protected BUT overridden, keep-confidence <= 0.05 (trash-confidence >= 0.95) -> Trash."""
+        """Protected BUT overridden, trash-confidence >= 0.70 -> Trash."""
         now = int(time.time())
         msg = _make_message(date_received=now - 500 * 86400)
         profile = _make_profile(read_rate=0.02)
         tier = assign_tier(
-            confidence=0.03, protected=True, overridden=True,
+            confidence=0.20, protected=True, overridden=True,
             profile=profile, message=msg,
         )
         assert tier == Tier.TRASH
 
     def test_not_protected_high_trash_confidence_trash(self):
-        """Not protected, keep-confidence <= 0.05 -> Trash."""
+        """Not protected, trash-confidence >= 0.70 -> Trash."""
         now = int(time.time())
         msg = _make_message(date_received=now - 500 * 86400)
         profile = _make_profile(read_rate=0.01)
         tier = assign_tier(
-            confidence=0.04, protected=False, overridden=False,
+            confidence=0.20, protected=False, overridden=False,
             profile=profile, message=msg,
         )
         assert tier == Tier.TRASH
@@ -418,7 +430,7 @@ class TestAssignTier:
         """Not protected, keep-confidence >= 0.7, recent and engaged -> Keep-Active."""
         now = int(time.time())
         msg = _make_message(date_received=now - 30 * 86400)
-        profile = _make_profile(read_rate=0.8, reply_rate=0.2)
+        profile = _make_profile(reply_rate=0.2, is_bidirectional=True)
         tier = assign_tier(
             confidence=0.85, protected=False, overridden=False,
             profile=profile, message=msg,
@@ -429,7 +441,7 @@ class TestAssignTier:
         """Not protected, keep-confidence >= 0.7, old -> Keep-Historical."""
         now = int(time.time())
         msg = _make_message(date_received=now - 365 * 86400)
-        profile = _make_profile(read_rate=0.8, reply_rate=0.2)
+        profile = _make_profile(reply_rate=0.2, is_bidirectional=True)
         tier = assign_tier(
             confidence=0.85, protected=False, overridden=False,
             profile=profile, message=msg,
@@ -437,21 +449,21 @@ class TestAssignTier:
         assert tier == Tier.KEEP_HISTORICAL
 
     def test_not_protected_mid_confidence_review(self):
-        """Not protected, confidence between 0.05 and 0.7 -> Review."""
+        """Not protected, confidence between trash and keep thresholds -> Review."""
         now = int(time.time())
         msg = _make_message(date_received=now - 200 * 86400)
-        profile = _make_profile(read_rate=0.3, reply_rate=0.05)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
         tier = assign_tier(
-            confidence=0.4, protected=False, overridden=False,
+            confidence=0.5, protected=False, overridden=False,
             profile=profile, message=msg,
         )
         assert tier == Tier.REVIEW
 
-    def test_active_vs_historical_split_recent_and_engaged(self):
-        """Keep-Active: within 180 days AND (read_rate > 0.5 OR reply_rate > 0.1)."""
+    def test_active_vs_historical_split_recent_and_bidirectional(self):
+        """Keep-Active: within 180 days AND bidirectional."""
         now = int(time.time())
         msg = _make_message(date_received=now - 90 * 86400)  # 90 days
-        profile = _make_profile(read_rate=0.6, reply_rate=0.0)
+        profile = _make_profile(reply_rate=0.0, is_bidirectional=True)
         tier = assign_tier(
             confidence=0.8, protected=False, overridden=False,
             profile=profile, message=msg,
@@ -459,10 +471,10 @@ class TestAssignTier:
         assert tier == Tier.KEEP_ACTIVE
 
     def test_active_vs_historical_split_recent_but_not_engaged(self):
-        """Keep-Historical: within 180 days but low engagement."""
+        """Keep-Historical: within 180 days but not bidirectional and low reply rate."""
         now = int(time.time())
         msg = _make_message(date_received=now - 90 * 86400)  # 90 days
-        profile = _make_profile(read_rate=0.3, reply_rate=0.05)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
         tier = assign_tier(
             confidence=0.8, protected=False, overridden=False,
             profile=profile, message=msg,
@@ -473,31 +485,31 @@ class TestAssignTier:
         """Keep-Historical: engaged but older than 180 days."""
         now = int(time.time())
         msg = _make_message(date_received=now - 300 * 86400)  # 300 days
-        profile = _make_profile(read_rate=0.9, reply_rate=0.5)
+        profile = _make_profile(reply_rate=0.5, is_bidirectional=True)
         tier = assign_tier(
             confidence=0.8, protected=False, overridden=False,
             profile=profile, message=msg,
         )
         assert tier == Tier.KEEP_HISTORICAL
 
-    def test_trash_threshold_boundary_at_0_05(self):
-        """Confidence exactly at 0.05 should NOT be Trash (needs strictly <= 0.05)."""
+    def test_trash_threshold_boundary_at_0_30(self):
+        """Confidence at 0.30 -> trash-confidence 0.70 -> Trash."""
         now = int(time.time())
         msg = _make_message(date_received=now - 500 * 86400)
         profile = _make_profile(read_rate=0.01)
         tier = assign_tier(
-            confidence=0.05, protected=False, overridden=False,
+            confidence=0.30, protected=False, overridden=False,
             profile=profile, message=msg,
         )
         assert tier == Tier.TRASH
 
     def test_confidence_just_above_trash_threshold_not_trash(self):
-        """Confidence of 0.06 should NOT be Trash."""
+        """Confidence of 0.31 -> trash-confidence 0.69 -> NOT Trash."""
         now = int(time.time())
         msg = _make_message(date_received=now - 500 * 86400)
         profile = _make_profile(read_rate=0.01)
         tier = assign_tier(
-            confidence=0.06, protected=False, overridden=False,
+            confidence=0.31, protected=False, overridden=False,
             profile=profile, message=msg,
         )
         assert tier != Tier.TRASH
@@ -605,3 +617,305 @@ class TestClassifyMessages:
         results = classify_messages(messages, profiles, set())
         assert len(results) == 1
         assert results[0].protected is True
+
+
+class TestContactScoreSystemContacts:
+    """Tests for contact_score with system contacts and name matching."""
+
+    def test_contact_score_system_contacts(self):
+        """in_system_contacts (not bidirectional) produces contact_score = 0.7."""
+        msg = _make_message()
+        profile = _make_profile(in_system_contacts=True)
+        signals = compute_signals(msg, profile)
+        contact = next(s for s in signals if s.name == "contact_score")
+        assert contact.value == 0.7
+
+    def test_contact_score_name_matched(self):
+        """name_matched_contact (not bidirectional, not in contacts) produces contact_score = 0.4."""
+        msg = _make_message()
+        profile = _make_profile(name_matched_contact=True)
+        signals = compute_signals(msg, profile)
+        contact = next(s for s in signals if s.name == "contact_score")
+        assert contact.value == 0.4
+
+    def test_contact_score_priority_bidirectional_over_system(self):
+        """Bidirectional takes priority over in_system_contacts."""
+        msg = _make_message()
+        profile = _make_profile(is_bidirectional=True, times_sent_to=5, in_system_contacts=True)
+        signals = compute_signals(msg, profile)
+        contact = next(s for s in signals if s.name == "contact_score")
+        assert contact.value == 1.0
+
+    def test_contact_score_priority_system_over_sent_to(self):
+        """in_system_contacts takes priority over sent-to-only."""
+        msg = _make_message()
+        profile = _make_profile(
+            is_bidirectional=False, times_sent_to=3,
+            in_system_contacts=True,
+        )
+        signals = compute_signals(msg, profile)
+        contact = next(s for s in signals if s.name == "contact_score")
+        assert contact.value == 0.7
+
+    def test_contact_score_priority_sent_to_over_name(self):
+        """sent-to-only takes priority over name_matched_contact."""
+        msg = _make_message()
+        profile = _make_profile(
+            is_bidirectional=False, times_sent_to=3,
+            name_matched_contact=True,
+        )
+        signals = compute_signals(msg, profile)
+        contact = next(s for s in signals if s.name == "contact_score")
+        assert contact.value == 0.5
+
+    def test_contact_score_priority_name_over_unknown(self):
+        """name_matched_contact produces 0.4 instead of 0.0 for unknown."""
+        msg = _make_message()
+        profile_unknown = _make_profile()
+        profile_named = _make_profile(name_matched_contact=True)
+        signals_unknown = compute_signals(msg, profile_unknown)
+        signals_named = compute_signals(msg, profile_named)
+        score_unknown = next(s for s in signals_unknown if s.name == "contact_score").value
+        score_named = next(s for s in signals_named if s.name == "contact_score").value
+        assert score_named > score_unknown
+
+
+class TestDocumentAttachmentProtection:
+    """Tests for TRASH -> REVIEW bump when message has document attachments."""
+
+    def test_trash_bumped_to_review_with_attachment(self):
+        """assign_tier bumps TRASH -> REVIEW when has_document_attachment is True."""
+        now = int(time.time())
+        msg = _make_message(date_received=now - 500 * 86400, has_document_attachment=True)
+        profile = _make_profile(read_rate=0.01)
+        tier = assign_tier(
+            confidence=0.20, protected=False, overridden=False,
+            profile=profile, message=msg,
+        )
+        assert tier == Tier.REVIEW
+
+    def test_trash_stays_trash_without_attachment(self):
+        """assign_tier keeps TRASH when has_document_attachment is False."""
+        now = int(time.time())
+        msg = _make_message(date_received=now - 500 * 86400, has_document_attachment=False)
+        profile = _make_profile(read_rate=0.01)
+        tier = assign_tier(
+            confidence=0.20, protected=False, overridden=False,
+            profile=profile, message=msg,
+        )
+        assert tier == Tier.TRASH
+
+    def test_attachment_does_not_affect_non_trash_tiers(self):
+        """Document attachment doesn't change Review or Keep tiers."""
+        now = int(time.time())
+        msg = _make_message(date_received=now - 200 * 86400, has_document_attachment=True)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        tier = assign_tier(
+            confidence=0.5, protected=False, overridden=False,
+            profile=profile, message=msg,
+        )
+        assert tier == Tier.REVIEW
+
+
+class TestFusedClassification:
+    """Tests for fuse_classification() — blending metadata + content scores."""
+
+    def test_blends_default_weights(self):
+        """Default weights: 0.6 metadata, 0.4 content."""
+        from icloud_cleanup.classifier import fuse_classification
+        result = fuse_classification(0.8, 0.6)
+        # 0.8 * 0.6 + 0.6 * 0.4 = 0.48 + 0.24 = 0.72
+        assert result == pytest.approx(0.72, abs=0.001)
+
+    def test_blends_custom_weights(self):
+        """Custom weights applied correctly."""
+        from icloud_cleanup.classifier import fuse_classification
+        result = fuse_classification(0.5, 1.0, metadata_weight=0.3, content_weight=0.7)
+        # 0.5 * 0.3 + 1.0 * 0.7 = 0.15 + 0.70 = 0.85
+        assert result == pytest.approx(0.85, abs=0.001)
+
+    def test_returns_float_in_0_1(self):
+        """Result is always a float in [0, 1]."""
+        from icloud_cleanup.classifier import fuse_classification
+        result = fuse_classification(1.0, 1.0)
+        assert 0.0 <= result <= 1.0
+        result = fuse_classification(0.0, 0.0)
+        assert 0.0 <= result <= 1.0
+
+    def test_clamps_above_1(self):
+        """Values that would exceed 1.0 are clamped."""
+        from icloud_cleanup.classifier import fuse_classification
+        result = fuse_classification(1.0, 1.0, metadata_weight=0.8, content_weight=0.8)
+        assert result == 1.0
+
+    def test_clamps_below_0(self):
+        """Values that would go below 0.0 are clamped."""
+        from icloud_cleanup.classifier import fuse_classification
+        result = fuse_classification(0.0, 0.0)
+        assert result == 0.0
+
+
+class TestReclassRules:
+    """Tests for reclassify_with_content() — tier transition rules."""
+
+    def _make_classification(
+        self,
+        *,
+        tier: Tier = Tier.REVIEW,
+        confidence: float = 0.5,
+        protected: bool = False,
+    ) -> Classification:
+        return Classification(
+            message_id=100,
+            tier=tier,
+            confidence=confidence,
+            signals="test_signals",
+            protected=protected,
+            timestamp=1700000000,
+        )
+
+    def test_review_high_content_score_to_keep(self):
+        """Review + high content_score (0.8) -> promoted to Keep tier."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 30 * 86400)
+        profile = _make_profile(reply_rate=0.3, is_bidirectional=True)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.8,
+            cluster_id=1, cluster_label="personal", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier in (Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL)
+
+    def test_review_low_content_score_to_trash(self):
+        """Review + low content_score (0.2) -> demoted to Trash."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.3)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 500 * 86400, automated_conversation=1)
+        profile = _make_profile(reply_rate=0.0, is_bidirectional=False, times_sent_to=0)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.2,
+            cluster_id=2, cluster_label="newsletters", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier == Tier.TRASH
+
+    def test_review_mid_content_score_stays_review(self):
+        """Review + mid content_score (0.5) -> stays Review."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 200 * 86400)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.5,
+            cluster_id=3, cluster_label="mixed", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier == Tier.REVIEW
+
+    def test_trash_high_content_promotes(self):
+        """Trash + high content_score (0.8) -> promoted to Review or Keep (safety net)."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.TRASH, confidence=0.1)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 30 * 86400)
+        profile = _make_profile(reply_rate=0.3, is_bidirectional=True, times_sent_to=5)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.8,
+            cluster_id=1, cluster_label="personal", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier != Tier.TRASH
+
+    def test_keep_active_never_demoted(self):
+        """Keep_Active + low content_score (0.1) -> stays Keep_Active (NEVER demoted)."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.KEEP_ACTIVE, confidence=0.9)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 30 * 86400)
+        profile = _make_profile(reply_rate=0.3, is_bidirectional=True)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.1,
+            cluster_id=5, cluster_label="spam", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier == Tier.KEEP_ACTIVE
+
+    def test_keep_historical_never_demoted(self):
+        """Keep_Historical + low content_score (0.1) -> stays Keep_Historical (NEVER demoted)."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.KEEP_HISTORICAL, confidence=0.8)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 400 * 86400)
+        profile = _make_profile(reply_rate=0.2, is_bidirectional=True)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.1,
+            cluster_id=5, cluster_label="spam", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.tier == Tier.KEEP_HISTORICAL
+
+    def test_protected_stays_protected(self):
+        """Protected message stays protected regardless of content score."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5, protected=True)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 200 * 86400)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.2,
+            cluster_id=2, cluster_label="newsletters", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.protected is True
+        assert result.tier != Tier.TRASH  # protected = never trash
+
+    def test_updates_classification_fields(self):
+        """reclassify_with_content populates content_score, cluster_id, cluster_label, content_source."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 100 * 86400)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.6,
+            cluster_id=7, cluster_label="shipping", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert result.content_score == 0.6
+        assert result.cluster_id == 7
+        assert result.cluster_label == "shipping"
+        assert result.content_source == "body"
+
+    def test_signals_appended(self):
+        """Output signals string contains content_score and cluster info."""
+        from icloud_cleanup.classifier import reclassify_with_content
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 100 * 86400)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.6,
+            cluster_id=7, cluster_label="shipping", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        assert "content_score=0.60" in result.signals
+        assert "cluster=shipping" in result.signals
+
+    def test_fused_confidence_replaces_original(self):
+        """Output confidence is the fused value, not the original."""
+        from icloud_cleanup.classifier import reclassify_with_content, fuse_classification
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        now = int(time.time())
+        msg = _make_message(date_received=now - 100 * 86400)
+        profile = _make_profile(reply_rate=0.05, is_bidirectional=False)
+        result = reclassify_with_content(
+            classification=cls, content_score=0.7,
+            cluster_id=3, cluster_label="mixed", content_source="body",
+            profile=profile, message=msg, replied_conv_ids=set(),
+        )
+        expected_fused = fuse_classification(0.5, 0.7)
+        assert result.confidence == pytest.approx(expected_fused, abs=0.001)
