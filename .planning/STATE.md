@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-05T15:51:00Z"
-last_activity: 2026-03-05 -- Completed 03-02 (executor + API fallback modules)
+stopped_at: Completed 03-01-PLAN.md and 03-02-PLAN.md
+last_updated: "2026-03-05T15:52:13Z"
+last_activity: 2026-03-05 -- Completed 03-01 (report + auto-triage) and 03-02 (executor + API fallback)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
-  percent: 82
+  completed_plans: 10
+  percent: 91
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 3 of 3 (Report, Review + Safe Execution) — IN PROGRESS
-Plan: 2 of 4 in current phase — 2 DONE
-Status: Executor + API fallback complete, report + review remaining
-Last activity: 2026-03-05 -- Completed 03-02 (executor + API fallback modules)
+Plan: 2 of 4 in current phase — Plans 01+02 DONE (wave 1 complete)
+Status: Report, auto-triage, executor, API fallback complete. Interactive review + final verification remain.
+Last activity: 2026-03-05 -- Completed 03-01 (report + auto-triage) and 03-02 (executor + API fallback)
 
-Progress: [████████░░] 82%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: 4min
-- Total execution time: 0.52 hours
+- Total execution time: 0.62 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [████████░░] 82%
 |-------|-------|-------|----------|
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
-| 3 | 2 | 5min | 3min |
+| 3 | 2 | 11min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (4min), 02-02 (3min), 02-03 (8min), 03-01 (~), 03-02 (5min)
+- Last 5 plans: 02-01 (4min), 02-02 (3min), 02-03 (8min), 03-01 (6min), 03-02 (5min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -81,6 +81,10 @@ Recent decisions affecting current work:
 - [02-03]: HDBSCAN tuned to min_cluster_size=25, min_samples=10 for ~30 clusters on 24k emails
 - [02-03]: Module-level worker functions with local imports for ProcessPoolExecutor compatibility
 - [02-03]: mlx-embeddings TokenizerWrapper needs inner tokenizer access via _tokenizer attribute
+- [03-01]: Confidence sparkline uses unicode block chars (no rich-sparklines dep)
+- [03-01]: Auto-triage thresholds: cluster unanimity > 0.85, sender consistency > 0.80
+- [03-01]: Protected emails block trash resolution for entire cluster/sender group
+- [03-01]: Noise clusters (id=None/-1) always skipped in cluster unanimity pass
 - [03-02]: AppleScript uses 'set mailbox of' (never 'delete') for predictable IMAP trash moves
 - [03-02]: Action log stores both message_id and rowid_in_db for audit completeness
 - [03-02]: API payloads use conservative 200/50 token averages for cost estimation
@@ -102,6 +106,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:51:00Z
-Stopped at: Completed 03-02-PLAN.md
-Resume file: .planning/phases/03-report-review-safe-execution/03-02-SUMMARY.md
+Last session: 2026-03-05T15:52:13Z
+Stopped at: Completed 03-01-PLAN.md and 03-02-PLAN.md
+Resume file: .planning/phases/03-report-review-safe-execution/03-01-SUMMARY.md
