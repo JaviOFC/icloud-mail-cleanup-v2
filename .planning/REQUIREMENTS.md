@@ -18,8 +18,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CSIG-01**: Score each contact by reply history, frequency, recency, and bidirectional communication
 - [x] **CSIG-02**: Extract behavioral signals from flags (read, replied, flagged, forwarded, ignored, deleted patterns)
-- [ ] **CSIG-03**: Generate MLX embeddings from combined subject+body text using M1 Max GPU
-- [ ] **CSIG-04**: Cluster emails semantically across senders (e.g., group all shipping notifications regardless of sender)
+- [x] **CSIG-03**: Generate MLX embeddings from combined subject+body text using M1 Max GPU
+- [x] **CSIG-04**: Cluster emails semantically across senders (e.g., group all shipping notifications regardless of sender)
 
 ### Classification
 
@@ -74,8 +74,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCAN-04 | Phase 2 | Complete |
 | CSIG-01 | Phase 1 | Complete |
 | CSIG-02 | Phase 1 | Complete |
-| CSIG-03 | Phase 2 | Pending |
-| CSIG-04 | Phase 2 | Pending |
+| CSIG-03 | Phase 2 | Complete |
+| CSIG-04 | Phase 2 | Complete |
 | CLAS-01 | Phase 1 | Complete |
 | CLAS-02 | Phase 1 | Complete |
 | CLAS-03 | Phase 1 | Complete |
