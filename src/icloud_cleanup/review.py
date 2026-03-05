@@ -298,7 +298,9 @@ def run_review(
                     choices=msg_choices,
                 ).ask()
                 if per_action is None:
-                    break
+                    console.print("\n[yellow]Review paused. Progress saved.[/yellow]")
+                    save_session(session, session_path)
+                    return session
                 if per_action == "← Back":
                     if msg_idx > 0:
                         msg_idx -= 1
