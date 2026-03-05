@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Project setup, domain models (Message/Contact/Classification), scanner module (DB access, bulk extraction, sender stats)
+- [x] 01-01-PLAN.md -- Project setup, domain models (Message/Contact/Classification), scanner module (DB access, bulk extraction, sender stats)
 - [ ] 01-02-PLAN.md -- Contact reputation model (Sent mailbox profiling, protection logic, behavioral signal extraction)
 - [ ] 01-03-PLAN.md -- Classification engine (8-signal weighted scoring, tier assignment, protection enforcement) + JSONL checkpoint persistence
 - [ ] 01-04-PLAN.md -- CLI wiring (scan/classify/report subcommands), rich progress bars, summary display, end-to-end verification
@@ -72,6 +72,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scanning + Metadata Classification | 0/4 | Not started | - |
+| 1. Scanning + Metadata Classification | 1/4 | In Progress | - |
 | 2. Content Analysis + Full Classification | 0/2 | Not started | - |
 | 3. Report, Review + Safe Execution | 0/2 | Not started | - |
