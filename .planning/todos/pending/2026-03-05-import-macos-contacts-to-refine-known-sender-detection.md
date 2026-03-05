@@ -8,9 +8,11 @@ files:
 
 ## Problem
 
-The classifier currently determines "known contacts" solely from Envelope Index data (bidirectional email exchanges, reply history). This misses contacts the user knows but hasn't emailed via iCloud — e.g., contacts added manually, synced from phone, or only emailed from other accounts.
+The classifier determines "known contacts" solely from Envelope Index data (bidirectional email exchanges, reply history). This misses contacts the user knows but hasn't emailed via iCloud — e.g., doctors, accountants, schools, vendors added to Contacts manually or synced from phone.
 
-macOS Contacts.app stores contacts in an AddressBook SQLite database (`~/Library/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb`) or via the Contacts framework. Importing these email addresses would strengthen the contact_score signal and protect more real contacts from being trashed.
+These senders score contact_score=0.0 ("unknown sender") and get no protection. If they're also automated or high-volume (e.g., appointment reminders from a doctor's office), they land in Trash. This is the main false-positive risk: **Keep-Historical emails from real contacts miscategorized as Trash because the only contact signal comes from email exchange history.**
+
+macOS Contacts.app stores contacts in a local SQLite database. Importing those email addresses would protect known contacts from being trashed even without bidirectional email history.
 
 ## Solution
 
