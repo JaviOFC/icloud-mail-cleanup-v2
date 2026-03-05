@@ -81,3 +81,11 @@ class Classification:
     cluster_id: int | None = None
     cluster_label: str | None = None
     content_source: str | None = None
+
+
+TIER_COLORS: dict[Tier, str] = {
+    Tier.TRASH: "red",
+    Tier.KEEP_ACTIVE: "green",
+    Tier.KEEP_HISTORICAL: "blue",
+    Tier.REVIEW: "yellow",
+}
