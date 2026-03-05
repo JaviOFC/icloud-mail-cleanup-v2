@@ -24,10 +24,13 @@
     height: auto;
     dock: bottom;
     padding: 0 1;
+    layout: horizontal;
+    overflow-x: auto;
 }
 
 #bulk-actions Button {
     margin: 0 1;
+    min-width: 10;
 }
 
 #api-status {

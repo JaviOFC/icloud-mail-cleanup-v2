@@ -68,10 +68,10 @@ class ReviewScreen(Screen):
                         yield Static("Clusters", id="cluster-header", classes="section-header")
                         yield ClusterListWidget(id="cluster-table")
                         with Horizontal(id="bulk-actions"):
-                            yield Button("Auto-Triage", id="btn-triage", variant="primary")
-                            yield Button("Approve Selected", id="btn-approve", variant="error")
-                            yield Button("Skip Selected", id="btn-skip", variant="success")
-                            yield Button("Run API Analysis", id="btn-api", variant="warning")
+                            yield Button("Triage", id="btn-triage", variant="primary")
+                            yield Button("Approve", id="btn-approve", variant="error")
+                            yield Button("Skip", id="btn-skip", variant="success")
+                            yield Button("API Analyze", id="btn-api", variant="warning")
                     with Vertical(id="right-panel"):
                         yield ClusterDetailWidget(id="cluster-detail")
                 yield Static("Loading...", id="api-status")
