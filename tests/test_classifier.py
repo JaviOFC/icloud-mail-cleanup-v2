@@ -775,9 +775,12 @@ class TestReclassRules:
         )
 
     def test_review_high_content_score_to_keep(self):
-        """Review + high content_score (0.8) -> promoted to Keep tier."""
+        """Review + high content_score (0.8) -> promoted to Keep tier.
+
+        metadata=0.65 * 0.6 + content=0.8 * 0.4 = 0.39 + 0.32 = 0.71 -> above KEEP_THRESHOLD
+        """
         from icloud_cleanup.classifier import reclassify_with_content
-        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.5)
+        cls = self._make_classification(tier=Tier.REVIEW, confidence=0.65)
         now = int(time.time())
         msg = _make_message(date_received=now - 30 * 86400)
         profile = _make_profile(reply_rate=0.3, is_bidirectional=True)

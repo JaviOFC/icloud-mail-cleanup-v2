@@ -14,18 +14,17 @@ from icloud_cleanup.models import (
     Tier,
 )
 
-# Signal weights (matching research spec)
+# Signal weights — read_rate dropped (unreliable due to bulk mark-as-read)
 CONTACT_WEIGHT = 0.30
 FREQUENCY_WEIGHT = 0.15
 RECENCY_WEIGHT = 0.15
-READ_RATE_WEIGHT = 0.15
-REPLY_RATE_WEIGHT = 0.10
+REPLY_RATE_WEIGHT = 0.20
 APPLE_CATEGORY_WEIGHT = 0.05
-AUTOMATION_WEIGHT = 0.05
+AUTOMATION_WEIGHT = 0.10
 FLAGGED_WEIGHT = 0.05
 
 # Tier thresholds
-TRASH_THRESHOLD = 0.95
+TRASH_THRESHOLD = 0.70
 KEEP_THRESHOLD = 0.70
 
 # Active/Historical split
@@ -48,9 +47,10 @@ def compute_signals(
     message: Message,
     profile: ContactProfile,
 ) -> list[SignalResult]:
-    """Compute all 8 scoring signals for a message.
+    """Compute scoring signals for a message.
 
     Returns a list of SignalResult objects with values in [0, 1].
+    read_rate is excluded — bulk mark-as-read makes it unreliable.
     """
     now = time.time()
 
@@ -58,39 +58,46 @@ def compute_signals(
     if profile.is_bidirectional:
         contact_val = 1.0
         contact_expl = "bidirectional contact"
+    elif profile.in_system_contacts:
+        contact_val = 0.7
+        contact_expl = "in system contacts (exact email)"
     elif profile.times_sent_to > 0:
         contact_val = 0.5
         contact_expl = "sent-to-only contact"
+    elif profile.name_matched_contact:
+        contact_val = 0.4
+        contact_expl = "name-matched contact (fuzzy)"
     else:
         contact_val = 0.0
         contact_expl = "unknown sender"
 
-    # 2. Frequency score: engagement-weighted volume
-    volume_factor = min(1.0, profile.times_received_from / 20)
-    freq_val = min(1.0, profile.read_rate * volume_factor)
-    freq_expl = (
-        f"read_rate={profile.read_rate:.2f} * "
-        f"volume_factor={volume_factor:.2f}"
-    )
+    # 2. Frequency score: volume-based, direction-aware
+    #    Known contacts: volume is positive (they email you and you care)
+    #    Unknown senders: high volume is negative (newsletter/spam pattern)
+    if profile.is_bidirectional:
+        freq_val = min(1.0, profile.times_received_from / 20)
+        freq_expl = f"bidirectional, volume={profile.times_received_from}/20"
+    elif profile.times_sent_to > 0:
+        freq_val = min(1.0, profile.times_received_from / 20) * 0.5
+        freq_expl = f"sent-to-only, volume={profile.times_received_from}/20 * 0.5"
+    else:
+        freq_val = max(0.0, 1.0 - profile.times_received_from / 50)
+        freq_expl = f"unknown, inverse_volume=1-{profile.times_received_from}/50"
 
     # 3. Recency score: exponential decay
     age_days = (now - message.date_received) / 86400
     recency_val = math.exp(-_RECENCY_LAMBDA * max(0, age_days))
     recency_expl = f"age={age_days:.0f}d, decay=exp(-{_RECENCY_LAMBDA}*{age_days:.0f})"
 
-    # 4. Read rate signal: profile-level read rate
-    read_rate_val = profile.read_rate
-    read_rate_expl = f"sender read_rate={profile.read_rate:.2f}"
-
-    # 5. Reply rate signal: profile-level reply rate
+    # 4. Reply rate signal: profile-level reply rate
     reply_rate_val = profile.reply_rate
     reply_rate_expl = f"sender reply_rate={profile.reply_rate:.2f}"
 
-    # 6. Apple category signal
+    # 5. Apple category signal
     apple_val = _APPLE_CATEGORY_MAP.get(message.model_category, 0.5)
     apple_expl = f"model_category={message.model_category} -> {apple_val}"
 
-    # 7. Automation signal: penalize automated + unsubscribe
+    # 6. Automation signal: penalize automated + unsubscribe
     if message.automated_conversation > 0:
         auto_val = 0.0
         auto_expl = "automated conversation"
@@ -101,7 +108,7 @@ def compute_signals(
         auto_val = max(0.0, auto_val - 0.5)
         auto_expl += f", has unsubscribe (type={message.unsubscribe_type})"
 
-    # 8. Flagged signal
+    # 7. Flagged signal
     flagged_val = 1.0 if profile.flagged_count > 0 else 0.0
     flagged_expl = f"flagged_count={profile.flagged_count}"
 
@@ -109,7 +116,6 @@ def compute_signals(
         SignalResult("contact_score", contact_val, CONTACT_WEIGHT, contact_expl),
         SignalResult("frequency_score", freq_val, FREQUENCY_WEIGHT, freq_expl),
         SignalResult("recency_score", recency_val, RECENCY_WEIGHT, recency_expl),
-        SignalResult("read_rate_signal", read_rate_val, READ_RATE_WEIGHT, read_rate_expl),
         SignalResult("reply_rate_signal", reply_rate_val, REPLY_RATE_WEIGHT, reply_rate_expl),
         SignalResult("apple_category_signal", apple_val, APPLE_CATEGORY_WEIGHT, apple_expl),
         SignalResult("automation_signal", auto_val, AUTOMATION_WEIGHT, auto_expl),
@@ -144,12 +150,12 @@ def assign_tier(
     """Assign a classification tier based on confidence and protection status.
 
     confidence represents "keep-worthiness" (higher = more worth keeping).
-    Trash requires (1 - confidence) >= TRASH_THRESHOLD, i.e. confidence <= 0.05.
+    Trash requires (1 - confidence) >= TRASH_THRESHOLD.
     """
     now = time.time()
     age_days = (now - message.date_received) / 86400
     is_recent = age_days <= ACTIVE_RECENCY_DAYS
-    is_engaged = profile.read_rate > 0.5 or profile.reply_rate > 0.1
+    is_engaged = profile.reply_rate > 0.1 or profile.is_bidirectional
 
     if protected and not overridden:
         # Protected contacts can never be Trash
@@ -162,6 +168,8 @@ def assign_tier(
     # Not protected OR protection overridden
     trash_confidence = 1.0 - confidence
     if trash_confidence >= TRASH_THRESHOLD:
+        if message.has_document_attachment:
+            return Tier.REVIEW
         return Tier.TRASH
 
     if confidence >= KEEP_THRESHOLD:
@@ -210,6 +218,87 @@ def classify_single(
         signals=explanation,
         protected=protected,
         timestamp=now,
+    )
+
+
+# Fused classification weights (metadata vs content)
+METADATA_WEIGHT = 0.6
+CONTENT_WEIGHT = 0.4
+
+
+def fuse_classification(
+    metadata_confidence: float,
+    content_score: float,
+    metadata_weight: float = METADATA_WEIGHT,
+    content_weight: float = CONTENT_WEIGHT,
+) -> float:
+    """Blend metadata confidence with content score into single fused confidence.
+
+    Returns a float clamped to [0.0, 1.0].
+    """
+    fused = metadata_confidence * metadata_weight + content_score * content_weight
+    return max(0.0, min(1.0, fused))
+
+
+def reclassify_with_content(
+    classification: Classification,
+    content_score: float,
+    cluster_id: int,
+    cluster_label: str,
+    content_source: str,
+    profile: ContactProfile,
+    message: Message,
+    replied_conv_ids: set[int],
+) -> Classification:
+    """Reclassify a message using fused metadata + content signals.
+
+    Tier transition rules:
+    - KEEP_ACTIVE / KEEP_HISTORICAL: NEVER demoted. Content fields updated only.
+    - TRASH: Can be promoted if fused confidence suggests it (safety net).
+    - REVIEW: Full flexibility -- assign_tier with fused confidence.
+    """
+    fused = fuse_classification(classification.confidence, content_score)
+
+    # Determine new tier based on original tier's rule
+    original_tier = classification.tier
+
+    if original_tier in (Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL):
+        # Keep tiers are locked -- never demoted
+        new_tier = original_tier
+    elif original_tier == Tier.TRASH:
+        # Trash can be promoted if content strongly disagrees
+        # Re-evaluate with fused confidence -- only promote, never stay trash
+        # if fused says keep/review
+        protected = classification.protected
+        overridden = check_protection_override(profile) if protected else False
+        candidate_tier = assign_tier(fused, protected, overridden, profile, message)
+        if candidate_tier in (Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL, Tier.REVIEW):
+            new_tier = candidate_tier
+        else:
+            new_tier = Tier.TRASH
+    else:
+        # REVIEW: full flexibility
+        protected = classification.protected
+        overridden = check_protection_override(profile) if protected else False
+        new_tier = assign_tier(fused, protected, overridden, profile, message)
+
+    # Build updated signals string
+    new_signals = (
+        f"{classification.signals}; "
+        f"content_score={content_score:.2f}, cluster={cluster_label}"
+    )
+
+    return Classification(
+        message_id=classification.message_id,
+        tier=new_tier,
+        confidence=fused,
+        signals=new_signals,
+        protected=classification.protected,
+        timestamp=int(time.time()),
+        content_score=content_score,
+        cluster_id=cluster_id,
+        cluster_label=cluster_label,
+        content_source=content_source,
     )
 
 
