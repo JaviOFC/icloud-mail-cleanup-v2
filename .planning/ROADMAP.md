@@ -12,7 +12,7 @@ Build an intelligent email classification pipeline in three phases: first, a met
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Scanning + Metadata Classification** - Read Envelope Index, score contacts and behavior, classify emails using metadata signals only
+- [x] **Phase 1: Scanning + Metadata Classification** - Read Envelope Index, score contacts and behavior, classify emails using metadata signals only
 - [ ] **Phase 2: Content Analysis + Full Classification** - Parse .emlx bodies, generate MLX embeddings, cluster semantically, upgrade classification with content signals
 - [ ] **Phase 3: Report, Review + Safe Execution** - Generate cleanup report, interactive terminal walkthrough, execute approved deletions with safety guarantees
 
@@ -33,8 +33,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01-PLAN.md -- Project setup, domain models (Message/Contact/Classification), scanner module (DB access, bulk extraction, sender stats)
 - [x] 01-02-PLAN.md -- Contact reputation model (Sent mailbox profiling, protection logic, behavioral signal extraction)
-- [ ] 01-03-PLAN.md -- Classification engine (8-signal weighted scoring, tier assignment, protection enforcement) + JSONL checkpoint persistence
-- [ ] 01-04-PLAN.md -- CLI wiring (scan/classify/report subcommands), rich progress bars, summary display, end-to-end verification
+- [x] 01-03-PLAN.md -- Classification engine (8-signal weighted scoring, tier assignment, protection enforcement) + JSONL checkpoint persistence
+- [x] 01-04-PLAN.md -- CLI wiring (scan/classify/report subcommands), rich progress bars, summary display, end-to-end verification
 
 ### Phase 2: Content Analysis + Full Classification
 **Goal**: Users get significantly improved classification accuracy through on-device content analysis of ambiguous emails
@@ -72,6 +72,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Scanning + Metadata Classification | 2/4 | In Progress | - |
+| 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
 | 2. Content Analysis + Full Classification | 0/2 | Not started | - |
 | 3. Report, Review + Safe Execution | 0/2 | Not started | - |

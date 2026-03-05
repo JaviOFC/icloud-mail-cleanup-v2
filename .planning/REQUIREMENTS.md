@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **SCAN-01**: Scan Envelope Index SQLite DB read-only for user@icloud.com (alias user@me.com)
 - [x] **SCAN-02**: Calculate volume statistics per sender (count, storage, date range, last received)
-- [ ] **SCAN-03**: Display progress bar with count/total and ETA during all long-running operations
+- [x] **SCAN-03**: Display progress bar with count/total and ETA during all long-running operations
 - [ ] **SCAN-04**: Parse .emlx files from disk for email body content extraction
 
 ### Classification Signals
@@ -70,7 +70,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-|-|-|
 | SCAN-01 | Phase 1 | Complete |
 | SCAN-02 | Phase 1 | Complete |
-| SCAN-03 | Phase 1 | Pending |
+| SCAN-03 | Phase 1 | Complete |
 | SCAN-04 | Phase 2 | Pending |
 | CSIG-01 | Phase 1 | Complete |
 | CSIG-02 | Phase 1 | Complete |
