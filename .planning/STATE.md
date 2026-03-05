@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Full pipeline operational: scan, classify, analyze, report, review, execute. 348 tests passing."
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-05T19:53:14.357Z"
-last_activity: "2026-03-05 - Completed quick task 1: scan project and update readme"
+status: "TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing."
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-05T20:28:00Z"
+last_activity: "2026-03-05 - Completed plan 04-01: TUI foundation"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 12
+  completed_plans: 12
   percent: 100
 ---
 
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Aggressively eliminate junk mail while guaranteeing zero false positives on personally meaningful emails
-**Current focus:** All 3 phases complete. Phase 4 (Interface & GUI) is optional/future.
+**Current focus:** Phase 4 (Interface & GUI) in progress -- building Textual TUI.
 
 ## Current Position
 
-Phase: 3 of 3 (Report, Review + Safe Execution) — COMPLETE
-Plan: 4 of 4 in current phase — All plans done, user-verified on real data
-Status: Full pipeline operational: scan, classify, analyze, report, review, execute. 348 tests passing.
-Last activity: 2026-03-05 - Completed quick task 1: scan project and update readme
+Phase: 4 of 4 (Interface & GUI)
+Plan: 1 of 2+ in current phase -- TUI foundation complete
+Status: TUI foundation complete: Textual app shell, Dashboard screen, mode switching, CLI wiring. 354 tests passing.
+Last activity: 2026-03-05 - Completed plan 04-01: TUI foundation
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 4min
-- Total execution time: 0.70 hours
+- Total execution time: 0.80 hours
 
 **By Phase:**
 
@@ -46,9 +46,10 @@ Progress: [██████████] 100%
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
 | 3 | 3 | 16min | 5min |
+| 4 | 1 | 6min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (3min), 02-03 (8min), 03-01 (6min), 03-02 (5min), 03-03 (5min)
+- Last 5 plans: 02-03 (8min), 03-01 (6min), 03-02 (5min), 03-03 (5min), 04-01 (6min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -94,6 +95,10 @@ Recent decisions affecting current work:
 - [03-03]: Propagation uses two strategies: exact domain match and subdomain match
 - [03-03]: Review session saved after every cluster decision for crash-safe resumability
 - [03-03]: CLI execute uses separate --execute flag for dry-run-by-default safety
+- [04-01]: Textual 1.0.0 installed (not 8.x as research assumed -- 1.0.0 is the actual latest stable release)
+- [04-01]: MODES uses class references (callables) instead of string names for reliable screen resolution
+- [04-01]: Dashboard polls for async data via set_timer(0.3) instead of reactive attributes for simplicity
+- [04-01]: Lazy import of icloud_cleanup.tui in CLI avoids textual import overhead for non-TUI commands
 
 ### Roadmap Evolution
 
@@ -117,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T19:53:14.353Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-interface-gui/04-CONTEXT.md
+Last session: 2026-03-05T20:28:00Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-interface-gui/04-01-SUMMARY.md

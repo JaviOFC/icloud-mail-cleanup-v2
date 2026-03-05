@@ -83,7 +83,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- App shell, dependencies, Dashboard screen with tier summary and storage widgets, CLI tui subcommand, test scaffold
+- [x] 04-01-PLAN.md -- App shell, dependencies, Dashboard screen with tier summary and storage widgets, CLI tui subcommand, test scaffold
 - [ ] 04-02-PLAN.md -- Review screen with cluster list + detail split, multi-select bulk actions, auto-triage, propagation toasts, session persistence
 - [ ] 04-03-PLAN.md -- Execute screen with dry-run/live progress and Pipeline screen with background workers and log output
 - [ ] 04-04-PLAN.md -- Help overlay, theme polish, and end-to-end human verification checkpoint
@@ -98,4 +98,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
 | 2. Content Analysis + Full Classification | 3/3 | Complete | 2026-03-05 |
 | 3. Report, Review + Safe Execution | 4/4 | Complete | 2026-03-05 |
-| 4. Interface & GUI (TUI) | 0/4 | Planned | - |
+| 4. Interface & GUI (TUI) | 1/4 | In Progress | - |
