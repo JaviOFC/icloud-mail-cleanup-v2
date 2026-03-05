@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from rich.console import Console
@@ -188,6 +189,19 @@ def cmd_classify(args: argparse.Namespace) -> None:
         conn.close()
 
 
+def _extract_body(item: tuple) -> tuple[int, str, str]:
+    """Worker: parse emlx body, return (msg_id, text, source)."""
+    from icloud_cleanup.emlx_parser import parse_emlx_body
+
+    msg_id, emlx_path, subject = item
+    body_text = None
+    if emlx_path is not None:
+        body_text = parse_emlx_body(emlx_path)
+    if body_text:
+        return (msg_id, body_text, "body")
+    return (msg_id, subject, "subject_only")
+
+
 def cmd_analyze(args: argparse.Namespace) -> None:
     """Execute the analyze subcommand: Phase 2 content analysis pipeline.
 
@@ -271,17 +285,6 @@ def cmd_analyze(args: argparse.Namespace) -> None:
         work_items.append((msg_id, emlx_path, msg.subject))
 
     # Parallel body extraction using multiprocessing (6 workers on M1 Max)
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-
-    def _extract_body(item: tuple) -> tuple[int, str, str]:
-        """Worker: parse emlx body, return (msg_id, text, source)."""
-        msg_id, emlx_path, subject = item
-        body_text = None
-        if emlx_path is not None:
-            body_text = parse_emlx_body(emlx_path)
-        if body_text:
-            return (msg_id, body_text, "body")
-        return (msg_id, subject, "subject_only")
 
     ordered_msg_ids: list[int] = []
     texts: list[str] = []
