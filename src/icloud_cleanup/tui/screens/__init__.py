@@ -40,11 +40,7 @@ class ReviewScreen(PlaceholderScreen):
 from icloud_cleanup.tui.screens.execute import ExecuteScreen as ExecuteScreen  # noqa: E501
 
 
-class PipelineScreen(PlaceholderScreen):
-    """Placeholder -- will be replaced in plan 04-04."""
-
-    def __init__(self) -> None:
-        super().__init__("Pipeline -- Coming soon...")
+from icloud_cleanup.tui.screens.pipeline import PipelineScreen as PipelineScreen  # noqa: E501
 
 
 # Re-export for convenience. DashboardScreen added after task 2.

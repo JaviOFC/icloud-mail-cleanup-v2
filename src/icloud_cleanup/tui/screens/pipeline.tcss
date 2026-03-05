@@ -1,0 +1,33 @@
+/* Pipeline screen layout */
+#pipeline-content {
+    height: 1fr;
+    padding: 1;
+}
+
+#pipeline-status {
+    text-align: center;
+    text-style: bold;
+    height: 1;
+    margin: 0 2;
+}
+
+#pipeline-progress {
+    margin: 1 2;
+}
+
+#pipeline-log {
+    height: 1fr;
+    margin: 0 2;
+    border: solid $panel;
+}
+
+#pipeline-buttons {
+    align: center middle;
+    height: 3;
+    dock: bottom;
+    margin: 1 0;
+}
+
+#pipeline-buttons Button {
+    margin: 0 2;
+}
