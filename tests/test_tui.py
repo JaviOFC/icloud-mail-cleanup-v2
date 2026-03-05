@@ -157,6 +157,42 @@ async def test_welcome_overlay_dismisses_on_keypress(tmp_path: Path) -> None:
         assert isinstance(app.screen, DashboardScreen)
 
 
+# --- Per-screen contextual help tests ---
+
+
+@pytest.mark.asyncio
+async def test_screen_help_shown_on_first_visit(tmp_path: Path) -> None:
+    """Switching to Review for the first time should show contextual help."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.screen_help import ScreenHelpOverlay
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        # Dismiss welcome overlay
+        await pilot.press("enter")
+        await pilot.pause(delay=0.3)
+
+        # Switch to review -- should show screen help
+        await pilot.press("r")
+        await pilot.pause(delay=0.3)
+        assert isinstance(app.screen, ScreenHelpOverlay)
+
+        # Dismiss screen help
+        await pilot.press("enter")
+        await pilot.pause(delay=0.3)
+
+        # Go back to dashboard, then to review again -- no overlay
+        await pilot.press("d")
+        await pilot.pause(delay=0.1)
+        await pilot.press("r")
+        await pilot.pause(delay=0.3)
+        # Should NOT show help again
+        from icloud_cleanup.tui.screens.review import ReviewScreen
+        assert isinstance(app.screen, ReviewScreen)
+
+
 # --- Help overlay tests ---
 
 

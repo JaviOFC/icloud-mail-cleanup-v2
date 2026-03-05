@@ -36,6 +36,7 @@ from icloud_cleanup.review import (
 from icloud_cleanup.tui.widgets.cluster_detail import ClusterDetailWidget
 from icloud_cleanup.tui.widgets.cluster_list import ClusterListWidget
 from icloud_cleanup.tui.widgets.propagation_tab import PropagationTabWidget
+from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 
 
 class ReviewScreen(Screen):
@@ -80,6 +81,7 @@ class ReviewScreen(Screen):
 
     def on_mount(self) -> None:
         self._check_data()
+        show_screen_help_if_first_visit(self, "review")
 
     def _check_data(self) -> None:
         """Wait for app data to load, then populate."""

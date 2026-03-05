@@ -9,6 +9,8 @@ from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, ProgressBar, RichLog, Static
 from textual.worker import get_current_worker
 
+from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+
 
 class ExecuteScreen(Screen):
     """Execute approved deletions with progress feedback.
@@ -38,6 +40,7 @@ class ExecuteScreen(Screen):
 
     def on_mount(self) -> None:
         self._update_summary()
+        show_screen_help_if_first_visit(self, "execute")
 
     def _update_summary(self) -> None:
         """Compute and display summary of approved items from session."""

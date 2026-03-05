@@ -7,6 +7,7 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Static
 
+from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 from icloud_cleanup.tui.widgets.storage_banner import StorageBannerWidget
 from icloud_cleanup.tui.widgets.tier_summary import TierSummaryWidget
 
@@ -26,6 +27,7 @@ class DashboardScreen(Screen):
 
     def on_mount(self) -> None:
         self._check_data()
+        show_screen_help_if_first_visit(self, "dashboard")
 
     def _check_data(self) -> None:
         """Populate widgets with report data if available."""

@@ -12,6 +12,7 @@ from textual.widgets import Button, Footer, Header, ProgressBar, Static
 from textual.worker import get_current_worker
 
 from icloud_cleanup.tui.widgets.pipeline_log import PipelineLogWidget
+from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
 
 
 class PipelineScreen(Screen):
@@ -34,6 +35,9 @@ class PipelineScreen(Screen):
                 yield Button("Run Pipeline", id="btn-pipeline", variant="primary")
                 yield Button("Cancel", id="btn-cancel", variant="warning", disabled=True)
         yield Footer()
+
+    def on_mount(self) -> None:
+        show_screen_help_if_first_visit(self, "pipeline")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-pipeline":
