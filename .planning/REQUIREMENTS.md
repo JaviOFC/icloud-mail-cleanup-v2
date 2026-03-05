@@ -32,8 +32,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **EXEC-01**: Generate detailed cleanup report grouped by category with examples and confidence distributions
 - [ ] **EXEC-02**: Interactive terminal walkthrough — category-by-category review with approve/reject per group
-- [ ] **EXEC-03**: Reversible execution — move to Trash only, maintain action log with restore capability
-- [ ] **EXEC-04**: Claude API fallback for ambiguous cases (metadata summaries only, never full email bodies)
+- [x] **EXEC-03**: Reversible execution — move to Trash only, maintain action log with restore capability
+- [x] **EXEC-04**: Claude API fallback for ambiguous cases (metadata summaries only, never full email bodies)
 
 ## v2 Requirements
 
@@ -82,8 +82,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLAS-04 | Phase 1 | Complete |
 | EXEC-01 | Phase 3 | Pending |
 | EXEC-02 | Phase 3 | Pending |
-| EXEC-03 | Phase 3 | Pending |
-| EXEC-04 | Phase 3 | Pending |
+| EXEC-03 | Phase 3 | Complete |
+| EXEC-04 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 16 total

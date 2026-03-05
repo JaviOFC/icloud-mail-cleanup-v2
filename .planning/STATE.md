@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 3 context gathered
-last_updated: "2026-03-05T15:21:14.555Z"
-last_activity: 2026-03-05 -- Completed Phase 2 (fused classification pipeline verified on real data)
+status: in-progress
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-05T15:51:00Z"
+last_activity: 2026-03-05 -- Completed 03-02 (executor + API fallback modules)
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
-  percent: 100
+  total_plans: 11
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-04)
 
 **Core value:** Aggressively eliminate junk mail while guaranteeing zero false positives on personally meaningful emails
-**Current focus:** Phase 2: Content Analysis + Full Classification
+**Current focus:** Phase 3: Report, Review + Safe Execution
 
 ## Current Position
 
-Phase: 2 of 3 (Content Analysis + Full Classification) — COMPLETE
-Plan: 3 of 3 in current phase — ALL DONE
-Status: Phase 2 complete, ready for Phase 3
-Last activity: 2026-03-05 -- Completed Phase 2 (fused classification pipeline verified on real data)
+Phase: 3 of 3 (Report, Review + Safe Execution) — IN PROGRESS
+Plan: 2 of 4 in current phase — 2 DONE
+Status: Executor + API fallback complete, report + review remaining
+Last activity: 2026-03-05 -- Completed 03-02 (executor + API fallback modules)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 3min
-- Total execution time: 0.32 hours
+- Total plans completed: 9
+- Average duration: 4min
+- Total execution time: 0.52 hours
 
 **By Phase:**
 
@@ -45,10 +45,11 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
+| 3 | 2 | 5min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (4min), 01-04 (2min), 02-01 (4min), 02-02 (3min), 02-03 (8min)
-- Trend: Steady (02-03 longer due to real-data tuning)
+- Last 5 plans: 02-01 (4min), 02-02 (3min), 02-03 (8min), 03-01 (~), 03-02 (5min)
+- Trend: Steady
 
 *Updated after each plan completion*
 
@@ -80,6 +81,10 @@ Recent decisions affecting current work:
 - [02-03]: HDBSCAN tuned to min_cluster_size=25, min_samples=10 for ~30 clusters on 24k emails
 - [02-03]: Module-level worker functions with local imports for ProcessPoolExecutor compatibility
 - [02-03]: mlx-embeddings TokenizerWrapper needs inner tokenizer access via _tokenizer attribute
+- [03-02]: AppleScript uses 'set mailbox of' (never 'delete') for predictable IMAP trash moves
+- [03-02]: Action log stores both message_id and rowid_in_db for audit completeness
+- [03-02]: API payloads use conservative 200/50 token averages for cost estimation
+- [03-02]: Metadata-only API payloads -- no body text ever sent to Claude API
 
 ### Roadmap Evolution
 
@@ -93,10 +98,10 @@ None yet.
 
 - [Phase 2]: mlx-embeddings 0.0.5 API is unstable -- needs local validation before writing ContentEmbedder
 - [Phase 2]: ModernBERT compatibility with mlx-embeddings untested -- MiniLM fallback available
-- [Phase 3]: AppleScript message ID to SQLite ROWID mapping is undocumented -- must validate empirically before execution code
+- [Phase 3]: ~~AppleScript message ID to SQLite ROWID mapping is undocumented~~ RESOLVED: ROWID == AppleScript `id` property (confirmed in 03-RESEARCH.md)
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:21:14.552Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-report-review-safe-execution/03-CONTEXT.md
+Last session: 2026-03-05T15:51:00Z
+Stopped at: Completed 03-02-PLAN.md
+Resume file: .planning/phases/03-report-review-safe-execution/03-02-SUMMARY.md
