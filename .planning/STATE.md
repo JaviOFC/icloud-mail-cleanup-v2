@@ -81,6 +81,10 @@ Recent decisions affecting current work:
 - [02-03]: Module-level worker functions with local imports for ProcessPoolExecutor compatibility
 - [02-03]: mlx-embeddings TokenizerWrapper needs inner tokenizer access via _tokenizer attribute
 
+### Roadmap Evolution
+
+- Phase 4 added: Interface & GUI
+
 ### Pending Todos
 
 None yet.

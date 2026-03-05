@@ -76,3 +76,13 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | 1. Scanning + Metadata Classification | 4/4 | Complete | 2026-03-05 |
 | 2. Content Analysis + Full Classification | 1/3 | In Progress|  |
 | 3. Report, Review + Safe Execution | 0/2 | Not started | - |
+
+### Phase 4: Interface & GUI
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 4 to break down)
