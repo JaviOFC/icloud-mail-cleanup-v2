@@ -156,6 +156,56 @@ class TestClassification:
         )
         assert 0.0 <= c.confidence <= 1.0
 
+    def test_content_fields_default_none(self):
+        """Classification with no content fields defaults to None (backward compat)."""
+        c = Classification(
+            message_id=1,
+            tier=Tier.REVIEW,
+            confidence=0.5,
+            signals="",
+            protected=False,
+            timestamp=0,
+        )
+        assert c.content_score is None
+        assert c.cluster_id is None
+        assert c.cluster_label is None
+        assert c.content_source is None
+
+    def test_content_fields_with_values(self):
+        """Classification stores content_score, cluster_id, cluster_label, content_source."""
+        c = Classification(
+            message_id=1,
+            tier=Tier.REVIEW,
+            confidence=0.5,
+            signals="",
+            protected=False,
+            timestamp=0,
+            content_score=0.75,
+            cluster_id=3,
+            cluster_label="shipping",
+            content_source="body",
+        )
+        assert c.content_score == 0.75
+        assert c.cluster_id == 3
+        assert c.cluster_label == "shipping"
+        assert c.content_source == "body"
+
+    def test_content_source_distinguishes_extraction_quality(self):
+        """content_source='body' vs 'subject_only' distinguishes extraction quality."""
+        c_body = Classification(
+            message_id=1, tier=Tier.REVIEW, confidence=0.5,
+            signals="", protected=False, timestamp=0,
+            content_source="body",
+        )
+        c_subject = Classification(
+            message_id=2, tier=Tier.REVIEW, confidence=0.5,
+            signals="", protected=False, timestamp=0,
+            content_source="subject_only",
+        )
+        assert c_body.content_source == "body"
+        assert c_subject.content_source == "subject_only"
+        assert c_body.content_source != c_subject.content_source
+
 
 class TestSignalResult:
     def test_all_fields(self):
