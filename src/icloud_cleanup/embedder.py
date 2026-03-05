@@ -61,18 +61,24 @@ def batch_embed(
     prefix = DOC_PREFIX if "modernbert" in model_name.lower() else ""
     all_embeds: list[np.ndarray] = []
 
+    # mlx-embeddings TokenizerWrapper doesn't expose batch_encode_plus;
+    # use the inner HF tokenizer with numpy tensors, then convert to MLX
+    inner_tokenizer = getattr(tokenizer, "_tokenizer", tokenizer)
+
     for i in range(0, len(texts), batch_size):
         batch = [prefix + t for t in texts[i : i + batch_size]]
-        inputs = tokenizer.batch_encode_plus(
+        inputs = inner_tokenizer(
             batch,
-            return_tensors="mlx",
+            return_tensors="np",
             padding=True,
             truncation=True,
             max_length=max_length,
         )
+        input_ids = mx.array(inputs["input_ids"])
+        attention_mask = mx.array(inputs["attention_mask"])
         outputs = model(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
+            input_ids,
+            attention_mask=attention_mask,
         )
         # mx.eval is MLX's GPU synchronization barrier (forces lazy compute)
         mx.eval(outputs.text_embeds)

@@ -15,6 +15,19 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
+def _safe_decode(payload: bytes, charset: str | None) -> str:
+    """Decode payload with charset, falling back to utf-8 then latin-1."""
+    # Sanitize charset: strip quotes, whitespace, and anything after a newline
+    if charset:
+        charset = charset.split("\n")[0].split("\r")[0].strip().strip("\"'")
+    if not charset:
+        charset = "utf-8"
+    try:
+        return payload.decode(charset, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        return payload.decode("utf-8", errors="replace")
+
+
 class _HTMLStripper(html.parser.HTMLParser):
     """Stdlib-only HTML tag stripper that skips script/style content."""
 
@@ -99,8 +112,7 @@ def parse_emlx_body(path: Path, max_chars: int = 4000) -> str | None:
         ct = msg.get_content_type()
         if ct not in ("text/plain", "text/html"):
             return None
-        charset = msg.get_content_charset() or "utf-8"
-        text = payload.decode(charset, errors="replace")
+        text = _safe_decode(payload, msg.get_content_charset())
         if ct == "text/html":
             text = strip_html(text)
         return text[:max_chars] if text.strip() else None
@@ -110,8 +122,7 @@ def parse_emlx_body(path: Path, max_chars: int = 4000) -> str | None:
         if part.get_content_type() == "text/plain":
             payload = part.get_payload(decode=True)
             if payload:
-                charset = part.get_content_charset() or "utf-8"
-                text = payload.decode(charset, errors="replace")
+                text = _safe_decode(payload, part.get_content_charset())
                 if text.strip():
                     return text[:max_chars]
 
@@ -120,8 +131,7 @@ def parse_emlx_body(path: Path, max_chars: int = 4000) -> str | None:
         if part.get_content_type() == "text/html":
             payload = part.get_payload(decode=True)
             if payload:
-                charset = part.get_content_charset() or "utf-8"
-                html_text = payload.decode(charset, errors="replace")
+                html_text = _safe_decode(payload, part.get_content_charset())
                 text = strip_html(html_text)
                 if text.strip():
                     return text[:max_chars]

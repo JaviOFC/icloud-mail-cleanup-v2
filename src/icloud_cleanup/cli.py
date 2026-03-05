@@ -476,6 +476,9 @@ def main() -> None:
 
     if args.verbose:
         logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s")
+        # Suppress noisy HTTP library logs even in verbose mode
+        for noisy in ("httpcore", "httpx", "filelock", "urllib3"):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
 
     if not args.command:
         parser.print_help()

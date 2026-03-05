@@ -17,24 +17,35 @@ class MockOutputs:
     text_embeds: np.ndarray
 
 
-class MockTokenizer:
-    """Simulates mlx_embeddings tokenizer with batch_encode_plus."""
+class MockInnerTokenizer:
+    """Simulates the inner HF tokenizer (callable, returns numpy tensors)."""
 
-    def batch_encode_plus(
+    def __init__(self):
+        self.last_call_texts = None
+
+    def __call__(
         self,
         texts: list[str],
         *,
-        return_tensors: str = "mlx",
+        return_tensors: str = "np",
         padding: bool = True,
         truncation: bool = True,
         max_length: int = 512,
     ) -> dict[str, np.ndarray]:
+        self.last_call_texts = texts
         seq_len = min(max_length, max(len(t.split()) for t in texts) if texts else 1)
         batch_size = len(texts)
         return {
             "input_ids": np.zeros((batch_size, seq_len), dtype=np.int32),
             "attention_mask": np.ones((batch_size, seq_len), dtype=np.int32),
         }
+
+
+class MockTokenizer:
+    """Simulates mlx_embeddings TokenizerWrapper with _tokenizer attr."""
+
+    def __init__(self):
+        self._tokenizer = MockInnerTokenizer()
 
 
 class MockModel:
@@ -124,6 +135,7 @@ class TestBatchEmbed:
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             result = batch_embed(texts, model, tokenizer, "some-model")
 
         assert isinstance(result, np.ndarray)
@@ -134,15 +146,15 @@ class TestBatchEmbed:
 
         model = MockModel(dim=768)
         tokenizer = MockTokenizer()
-        tokenizer.batch_encode_plus = MagicMock(wraps=tokenizer.batch_encode_plus)
         texts = ["hello", "world"]
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             batch_embed(texts, model, tokenizer, "modernbert-embed-base")
 
-        call_args = tokenizer.batch_encode_plus.call_args[0][0]
-        for text in call_args:
+        call_texts = tokenizer._tokenizer.last_call_texts
+        for text in call_texts:
             assert text.startswith(DOC_PREFIX)
 
     def test_no_prefix_for_non_modernbert(self):
@@ -150,15 +162,15 @@ class TestBatchEmbed:
 
         model = MockModel(dim=768)
         tokenizer = MockTokenizer()
-        tokenizer.batch_encode_plus = MagicMock(wraps=tokenizer.batch_encode_plus)
         texts = ["hello", "world"]
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             batch_embed(texts, model, tokenizer, "all-MiniLM-L6-v2")
 
-        call_args = tokenizer.batch_encode_plus.call_args[0][0]
-        for text in call_args:
+        call_texts = tokenizer._tokenizer.last_call_texts
+        for text in call_texts:
             assert not text.startswith(DOC_PREFIX)
 
     def test_handles_empty_strings(self):
@@ -170,6 +182,7 @@ class TestBatchEmbed:
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             result = batch_embed(texts, model, tokenizer, "some-model")
 
         assert result.shape == (3, 768)
@@ -183,6 +196,7 @@ class TestBatchEmbed:
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             result = batch_embed(
                 texts, model, tokenizer, "some-model", batch_size=3,
             )
@@ -200,6 +214,7 @@ class TestBatchEmbed:
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             result = batch_embed(texts, model, tokenizer, "some-model")
 
         norms = np.linalg.norm(result, axis=1)
@@ -213,6 +228,7 @@ class TestBatchEmbed:
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             result = batch_embed(
                 ["just one"], model, tokenizer, "some-model",
             )
@@ -225,12 +241,28 @@ class TestBatchEmbed:
 
         model = MockModel(dim=768)
         tokenizer = MockTokenizer()
-        tokenizer.batch_encode_plus = MagicMock(wraps=tokenizer.batch_encode_plus)
         texts = ["hello"]
 
         with patch("icloud_cleanup.embedder.mx") as mock_mx:
             mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
             batch_embed(texts, model, tokenizer, "ModernBERT-Embed-Base")
 
-        call_args = tokenizer.batch_encode_plus.call_args[0][0]
-        assert call_args[0].startswith(DOC_PREFIX)
+        call_texts = tokenizer._tokenizer.last_call_texts
+        assert call_texts[0].startswith(DOC_PREFIX)
+
+    def test_fallback_when_no_inner_tokenizer(self):
+        """If tokenizer has no _tokenizer attr, use tokenizer directly."""
+        from icloud_cleanup.embedder import batch_embed
+
+        model = MockModel(dim=768)
+        # Use the inner tokenizer directly (no wrapper)
+        tokenizer = MockInnerTokenizer()
+        texts = ["hello", "world"]
+
+        with patch("icloud_cleanup.embedder.mx") as mock_mx:
+            mock_mx.eval = MagicMock()
+            mock_mx.array = np.asarray
+            result = batch_embed(texts, model, tokenizer, "some-model")
+
+        assert result.shape == (2, 768)
