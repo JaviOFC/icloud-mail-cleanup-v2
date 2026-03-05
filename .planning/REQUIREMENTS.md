@@ -23,10 +23,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Classification
 
-- [ ] **CLAS-01**: Classify every email into 4 tiers: Trash / Keep-Active / Keep-Historical / Review
-- [ ] **CLAS-02**: Assign 0-1 confidence score per email with explanation of contributing signals
-- [ ] **CLAS-03**: Two-pass strategy — metadata-only first pass, MLX embeddings only for ambiguous remainder
-- [ ] **CLAS-04**: Protect personal/historical emails (friends, old jobs, memories) with asymmetric threshold (0.95+ to trash)
+- [x] **CLAS-01**: Classify every email into 4 tiers: Trash / Keep-Active / Keep-Historical / Review
+- [x] **CLAS-02**: Assign 0-1 confidence score per email with explanation of contributing signals
+- [x] **CLAS-03**: Two-pass strategy — metadata-only first pass, MLX embeddings only for ambiguous remainder
+- [x] **CLAS-04**: Protect personal/historical emails (friends, old jobs, memories) with asymmetric threshold (0.95+ to trash)
 
 ### Review & Execution
 
@@ -76,10 +76,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CSIG-02 | Phase 1 | Complete |
 | CSIG-03 | Phase 2 | Pending |
 | CSIG-04 | Phase 2 | Pending |
-| CLAS-01 | Phase 1 | Pending |
-| CLAS-02 | Phase 1 | Pending |
-| CLAS-03 | Phase 1 | Pending |
-| CLAS-04 | Phase 1 | Pending |
+| CLAS-01 | Phase 1 | Complete |
+| CLAS-02 | Phase 1 | Complete |
+| CLAS-03 | Phase 1 | Complete |
+| CLAS-04 | Phase 1 | Complete |
 | EXEC-01 | Phase 3 | Pending |
 | EXEC-02 | Phase 3 | Pending |
 | EXEC-03 | Phase 3 | Pending |

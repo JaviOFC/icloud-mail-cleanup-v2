@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-05T04:09:07Z"
-last_activity: 2026-03-05 -- Completed plan 01-02 (contact reputation model)
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-05T04:15:39Z"
+last_activity: 2026-03-05 -- Completed plan 01-03 (metadata classifier and checkpoint)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 8
-  completed_plans: 2
-  percent: 25
+  completed_plans: 3
+  percent: 38
 ---
 
 # Project State
@@ -26,28 +26,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Scanning + Metadata Classification)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: Executing
-Last activity: 2026-03-05 -- Completed plan 01-02 (contact reputation model)
+Last activity: 2026-03-05 -- Completed plan 01-03 (metadata classifier and checkpoint)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [████░░░░░░] 38%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 3min
-- Total execution time: 0.10 hours
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 2 | 6min | 3min |
+| 1 | 3 | 10min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min), 01-02 (2min)
-- Trend: Accelerating
+- Last 5 plans: 01-01 (4min), 01-02 (2min), 01-03 (4min)
+- Trend: Steady
 
 *Updated after each plan completion*
 
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 - [01-02]: Reply rate combines conversation_id overlap AND flags bit 2 -- uses both detection methods for fuller coverage
 - [01-02]: Protection override at strict <5% read rate (not <=) -- 5% itself keeps protection
 - [01-02]: Empty sender addresses filtered from profile building -- avoids phantom profiles from NULL FK rows
+- [01-03]: Confidence = keep-worthiness (higher = more worth keeping), Trash requires confidence <= 0.05
+- [01-03]: Recency decay lambda=0.003 (~231-day half-life) -- acceptable approximation of "~1 year"
+- [01-03]: Frequency score = read_rate * min(1.0, received_count/20) -- normalizes volume against engagement
+- [01-03]: Unknown senders get zeroed-out default ContactProfile -- ensures every message gets classified
 
 ### Pending Todos
 
@@ -79,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T04:09:07Z
-Stopped at: Completed 01-02-PLAN.md
-Resume file: .planning/phases/01-scanning-metadata-classification/01-02-SUMMARY.md
+Last session: 2026-03-05T04:15:39Z
+Stopped at: Completed 01-03-PLAN.md
+Resume file: .planning/phases/01-scanning-metadata-classification/01-03-SUMMARY.md
