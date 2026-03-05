@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-03-05T04:03:55Z"
-last_activity: 2026-03-05 -- Completed plan 01-01 (project setup + scanner)
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-05T04:09:07Z"
+last_activity: 2026-03-05 -- Completed plan 01-02 (contact reputation model)
 progress:
   total_phases: 3
   completed_phases: 0
   total_plans: 8
-  completed_plans: 1
-  percent: 12
+  completed_plans: 2
+  percent: 25
 ---
 
 # Project State
@@ -26,28 +26,28 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 1 of 3 (Scanning + Metadata Classification)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: Executing
-Last activity: 2026-03-05 -- Completed plan 01-01 (project setup + scanner)
+Last activity: 2026-03-05 -- Completed plan 01-02 (contact reputation model)
 
-Progress: [█░░░░░░░░░] 12%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 4min
-- Total execution time: 0.07 hours
+- Total plans completed: 2
+- Average duration: 3min
+- Total execution time: 0.10 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 1 | 4min | 4min |
+| 1 | 2 | 6min | 3min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4min)
-- Trend: First plan
+- Last 5 plans: 01-01 (4min), 01-02 (2min)
+- Trend: Accelerating
 
 *Updated after each plan completion*
 
@@ -63,6 +63,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Phases 3+4 from research merged into single Phase 3 -- review and execution are one user workflow at coarse granularity
 - [01-01]: Test helpers extracted to tests/helpers.py -- conftest.py not importable as regular module by test files
 - [01-01]: COALESCE for sender_address/subject in scan query -- downstream code gets strings not None
+- [01-02]: Reply rate combines conversation_id overlap AND flags bit 2 -- uses both detection methods for fuller coverage
+- [01-02]: Protection override at strict <5% read rate (not <=) -- 5% itself keeps protection
+- [01-02]: Empty sender addresses filtered from profile building -- avoids phantom profiles from NULL FK rows
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T04:03:55Z
-Stopped at: Completed 01-01-PLAN.md
-Resume file: .planning/phases/01-scanning-metadata-classification/01-01-SUMMARY.md
+Last session: 2026-03-05T04:09:07Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: .planning/phases/01-scanning-metadata-classification/01-02-SUMMARY.md
