@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 03-01-PLAN.md and 03-02-PLAN.md
-last_updated: "2026-03-05T15:52:13Z"
-last_activity: 2026-03-05 -- Completed 03-01 (report + auto-triage) and 03-02 (executor + API fallback)
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-05T16:01:16Z"
+last_activity: 2026-03-05 -- Completed 03-03 (review session + propagation + CLI wiring)
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-04)
 ## Current Position
 
 Phase: 3 of 3 (Report, Review + Safe Execution) — IN PROGRESS
-Plan: 2 of 4 in current phase — Plans 01+02 DONE (wave 1 complete)
-Status: Report, auto-triage, executor, API fallback complete. Interactive review + final verification remain.
-Last activity: 2026-03-05 -- Completed 03-01 (report + auto-triage) and 03-02 (executor + API fallback)
+Plan: 3 of 4 in current phase — Plans 01+02+03 DONE (waves 1+2 complete)
+Status: Report, auto-triage, executor, API fallback, interactive review, propagation, CLI wiring complete. Final verification remains.
+Last activity: 2026-03-05 -- Completed 03-03 (review session + propagation + CLI wiring)
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 4min
-- Total execution time: 0.62 hours
+- Total execution time: 0.70 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [█████████░] 91%
 |-------|-------|-------|----------|
 | 1 | 4 | 12min | 3min |
 | 2 | 3 | 15min | 5min |
-| 3 | 2 | 11min | 6min |
+| 3 | 3 | 16min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (4min), 02-02 (3min), 02-03 (8min), 03-01 (6min), 03-02 (5min)
+- Last 5 plans: 02-02 (3min), 02-03 (8min), 03-01 (6min), 03-02 (5min), 03-03 (5min)
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -89,6 +89,11 @@ Recent decisions affecting current work:
 - [03-02]: Action log stores both message_id and rowid_in_db for audit completeness
 - [03-02]: API payloads use conservative 200/50 token averages for cost estimation
 - [03-02]: Metadata-only API payloads -- no body text ever sent to Claude API
+- [03-03]: Auto-approve threshold at 0.98 confidence for trash items (not 0.95)
+- [03-03]: Common email domains excluded from domain propagation (18 providers)
+- [03-03]: Propagation uses two strategies: exact domain match and subdomain match
+- [03-03]: Review session saved after every cluster decision for crash-safe resumability
+- [03-03]: CLI execute uses separate --execute flag for dry-run-by-default safety
 
 ### Roadmap Evolution
 
@@ -106,6 +111,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-05T15:52:13Z
-Stopped at: Completed 03-01-PLAN.md and 03-02-PLAN.md
-Resume file: .planning/phases/03-report-review-safe-execution/03-01-SUMMARY.md
+Last session: 2026-03-05T16:01:16Z
+Stopped at: Completed 03-03-PLAN.md
+Resume file: .planning/phases/03-report-review-safe-execution/03-03-SUMMARY.md
