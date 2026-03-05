@@ -22,13 +22,13 @@
 }
 
 #exec-progress {
-    margin: 0 2;
+    margin: 1 4;
 }
 
 #exec-stats {
     text-align: center;
     height: 1;
-    margin: 0 2;
+    margin: 0 4;
     color: $text-muted;
 }
 
