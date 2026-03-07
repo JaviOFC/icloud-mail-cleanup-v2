@@ -46,7 +46,7 @@ async def test_app_launches(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_mode_switching(tmp_path: Path) -> None:
-    """D/R/E/P keys should switch between screens."""
+    """1/2/3/4 keys should switch between screens."""
     from icloud_cleanup.tui import CleanupApp
     from icloud_cleanup.tui.screens import ReviewScreen
     from icloud_cleanup.tui.screens.dashboard import DashboardScreen
@@ -57,10 +57,10 @@ async def test_mode_switching(tmp_path: Path) -> None:
     async with app.run_test(size=(120, 40)) as pilot:
         assert isinstance(app.screen, DashboardScreen)
 
-        await pilot.press("r")
+        await pilot.press("3")
         assert isinstance(app.screen, ReviewScreen)
 
-        await pilot.press("d")
+        await pilot.press("2")
         assert isinstance(app.screen, DashboardScreen)
 
 
@@ -144,7 +144,7 @@ async def test_active_footer_highlights_current_mode(tmp_path: Path) -> None:
         assert app.current_mode == "dashboard"
 
         # Switch to review
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=0.5)
         assert app.current_mode == "review"
 
@@ -199,7 +199,7 @@ async def test_screen_help_shown_on_first_visit(tmp_path: Path) -> None:
         await pilot.pause(delay=0.3)
 
         # Switch to review -- should show screen help
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=0.3)
         assert isinstance(app.screen, ScreenHelpOverlay)
 
@@ -208,9 +208,9 @@ async def test_screen_help_shown_on_first_visit(tmp_path: Path) -> None:
         await pilot.pause(delay=0.3)
 
         # Go back to dashboard, then to review again -- no overlay
-        await pilot.press("d")
+        await pilot.press("2")
         await pilot.pause(delay=0.1)
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=0.3)
         # Should NOT show help again
         from icloud_cleanup.tui.screens.review import ReviewScreen
@@ -325,7 +325,7 @@ async def test_review_cluster_list_loads(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         assert isinstance(app.screen, ReviewScreen)
         await pilot.pause(delay=1.0)
 
@@ -344,7 +344,7 @@ async def test_review_detail_updates_on_selection(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=1.0)
 
         # Move down in the cluster list
@@ -368,7 +368,7 @@ async def test_bulk_approve(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path, session_path=session_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=1.0)
 
         # Select first cluster with Space
@@ -394,7 +394,7 @@ async def test_session_interop(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path, session_path=session_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=1.0)
 
         # Select and approve
@@ -412,7 +412,7 @@ async def test_session_interop(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_propagation_tab_exists(tmp_path: Path) -> None:
-    """Review screen should have a Propagation tab with PropagationTabWidget."""
+    """Review screen should have a Similar Senders tab with PropagationTabWidget."""
     from icloud_cleanup.tui import CleanupApp
     from icloud_cleanup.tui.screens.review import ReviewScreen
     from icloud_cleanup.tui.widgets.propagation_tab import PropagationTabWidget
@@ -421,7 +421,7 @@ async def test_propagation_tab_exists(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=1.0)
 
         # PropagationTabWidget should exist in the DOM
@@ -440,7 +440,7 @@ async def test_api_status_shows_remaining(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("r")
+        await pilot.press("3")
         await pilot.pause(delay=1.0)
 
         from textual.widgets import Static
@@ -471,7 +471,7 @@ async def test_api_button_submits_batch(tmp_path: Path) -> None:
     review_mod.classify_ambiguous_batch = MagicMock(return_value=mock_batch)
     try:
         async with app.run_test(size=(120, 40)) as pilot:
-            await pilot.press("r")
+            await pilot.press("3")
             await pilot.pause(delay=1.0)
 
             # Verify button exists and is not disabled
@@ -525,7 +525,7 @@ async def test_execute_screen_shows_summary(tmp_path: Path) -> None:
         app.session = _make_test_session()
 
         # Switch to execute mode
-        await pilot.press("e")
+        await pilot.press("4")
         assert isinstance(app.screen, ExecuteScreen)
 
         # Wait for mount to update summary
@@ -546,7 +546,7 @@ async def test_execute_screen_has_buttons(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("e")
+        await pilot.press("4")
         assert isinstance(app.screen, ExecuteScreen)
 
         dry_btn = app.query_one("#btn-dry")
@@ -607,7 +607,7 @@ async def test_execute_progress(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         # Set session with approved items
         app.session = _make_test_session()
 
-        await pilot.press("e")
+        await pilot.press("4")
         assert isinstance(app.screen, ExecuteScreen)
         await pilot.pause(delay=0.3)
 
@@ -636,7 +636,7 @@ async def test_pipeline_screen_layout(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("p")
+        await pilot.press("1")
         assert isinstance(app.screen, PipelineScreen)
 
         # Verify key widgets exist
@@ -664,7 +664,7 @@ async def test_pipeline_screen_status(tmp_path: Path) -> None:
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("p")
+        await pilot.press("1")
         assert isinstance(app.screen, PipelineScreen)
 
         status = app.query_one("#pipeline-status")
@@ -727,7 +727,7 @@ async def test_pipeline_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause(delay=0.5)
-        await pilot.press("p")
+        await pilot.press("1")
         assert isinstance(app.screen, PipelineScreen)
 
         # Click Run Pipeline
@@ -740,3 +740,42 @@ async def test_pipeline_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         status_text = str(status.renderable)
         # Should be Complete or Error (step 3 may fail without MLX)
         assert "Complete" in status_text or "Error" in status_text or "Running" in status_text
+
+
+# --- Screen help recall tests ---
+
+
+@pytest.mark.asyncio
+async def test_screen_help_recallable_with_h(tmp_path: Path) -> None:
+    """Pressing h should open screen help overlay on any screen."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.screen_help import ScreenHelpOverlay
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        # On dashboard, press h
+        await pilot.press("h")
+        await pilot.pause(delay=0.3)
+        assert isinstance(app.screen, ScreenHelpOverlay)
+
+
+@pytest.mark.asyncio
+async def test_screen_hint_bar_present(tmp_path: Path) -> None:
+    """Each screen should have a ScreenHintBar widget."""
+    from icloud_cleanup.tui import CleanupApp
+    from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
+
+    checkpoint_path = _write_test_checkpoint(tmp_path)
+    app = CleanupApp(checkpoint_path=checkpoint_path)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        # Dashboard
+        hint = app.query_one(ScreenHintBar)
+        assert hint is not None
+
+        # Pipeline
+        await pilot.press("1")
+        hint = app.query_one(ScreenHintBar)
+        assert hint is not None

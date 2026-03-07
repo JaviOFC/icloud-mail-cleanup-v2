@@ -2,65 +2,101 @@
 
 from __future__ import annotations
 
+from rich.table import Table
+
 from textual.app import ComposeResult
 from textual.widgets import Static
 
 from icloud_cleanup.tui.widgets.dismissible_overlay import DismissibleOverlay
 
-# Screen-specific help text (screen_name -> (title, body))
-SCREEN_HELP: dict[str, tuple[str, str]] = {
+# Screen-specific help: (title, prose_lines, key_action_pairs)
+SCREEN_HELP: dict[str, tuple[str, list[str], list[tuple[str, str]]]] = {
     "dashboard": (
         "Dashboard",
-        "Overview of your mailbox classification results.\n"
-        "\n"
-        "The [bold]tier summary[/bold] shows how emails are categorized:\n"
-        "  Trash    - safe to delete (junk, spam, old newsletters)\n"
-        "  Active   - recent personal/important emails (protected)\n"
-        "  Historical - old but possibly meaningful emails\n"
-        "  Review   - ambiguous emails needing your decision\n"
-        "\n"
-        "The [bold]storage banner[/bold] shows how much space you can reclaim.\n"
-        "\n"
-        "Press [bold]R[/bold] to start reviewing email clusters.",
+        [
+            "Overview of your mailbox classification results.",
+            "",
+            "The [bold]tier summary[/bold] shows how emails are categorized:",
+            "  Trash, Active, Historical, and Review.",
+            "",
+            "The [bold]storage banner[/bold] shows how much space you can reclaim.",
+        ],
+        [
+            ("3", "Go to Review screen"),
+            ("1", "Go to Pipeline screen"),
+            ("h", "Reopen this help"),
+            ("?", "Full keybinding reference"),
+        ],
     ),
     "review": (
         "Review",
-        "Review and decide on email clusters.\n"
-        "\n"
-        "  [bold]Up/Down[/bold]  Navigate cluster list\n"
-        "  [bold]Space[/bold]    Select/deselect clusters\n"
-        "  [bold]A[/bold]        Approve selected (mark for deletion)\n"
-        "  [bold]S[/bold]        Skip selected (keep them)\n"
-        "  [bold]I[/bold]        Inspect mode (see individual emails)\n"
-        "\n"
-        "Use [bold]Auto-Triage[/bold] to auto-resolve high-confidence clusters.\n"
-        "Use [bold]Run API Analysis[/bold] for AI-assisted ambiguous emails.\n"
-        "Check the [bold]Propagation[/bold] tab for similar-sender suggestions.",
+        [
+            "Review and decide on email clusters.",
+            "",
+            "Use [bold]Auto-Sort[/bold] to auto-resolve high-confidence clusters.",
+            "Use [bold]Run API Analysis[/bold] for AI-assisted ambiguous emails.",
+            "Check the [bold]Similar Senders[/bold] tab for related sender suggestions.",
+        ],
+        [
+            ("Up/Down", "Navigate cluster list"),
+            ("Space", "Select/deselect clusters"),
+            ("A", "Approve selected (mark for deletion)"),
+            ("S", "Skip selected (keep them)"),
+            ("I", "Inspect mode (see individual emails)"),
+            ("h", "Reopen this help"),
+            ("?", "Full keybinding reference"),
+        ],
     ),
     "execute": (
         "Execute",
-        "Execute approved email deletions.\n"
-        "\n"
-        "Always start with [bold]Dry Run[/bold] to preview what will happen.\n"
-        "Only use [bold]Execute for Real[/bold] when you're confident.\n"
-        "\n"
-        "The progress bar and log show real-time execution status.\n"
-        "Press [bold]C[/bold] to cancel a running execution.\n"
-        "Press [bold]Escape[/bold] to return to Review.",
+        [
+            "Execute approved email deletions.",
+            "",
+            "Always start with [bold]Dry Run[/bold] to preview what will happen.",
+            "Only use [bold]Execute for Real[/bold] when you're confident.",
+        ],
+        [
+            ("Dry Run", "Preview deletions without acting"),
+            ("Execute", "Move approved emails to Trash"),
+            ("C", "Cancel a running execution"),
+            ("Escape", "Return to Review"),
+            ("h", "Reopen this help"),
+        ],
     ),
     "pipeline": (
         "Pipeline",
-        "Re-run the email analysis pipeline.\n"
-        "\n"
-        "The pipeline has 3 steps:\n"
-        "  1. [bold]Scan[/bold]     - read the Mail.app Envelope Index\n"
-        "  2. [bold]Classify[/bold] - categorize emails by metadata signals\n"
-        "  3. [bold]Analyze[/bold]  - content analysis via MLX embeddings\n"
-        "\n"
-        "Click [bold]Run Pipeline[/bold] to start. Progress is shown live.\n"
-        "Press [bold]C[/bold] to cancel. Results update the Dashboard & Review.",
+        [
+            "Re-run the email analysis pipeline.",
+            "",
+            "The pipeline has 3 steps:",
+            "  1. [bold]Scan[/bold] — read the Mail.app Envelope Index",
+            "  2. [bold]Classify[/bold] — categorize emails by metadata signals",
+            "  3. [bold]Analyze[/bold] — content analysis via MLX embeddings",
+        ],
+        [
+            ("Run Pipeline", "Start the analysis"),
+            ("C", "Cancel the pipeline"),
+            ("h", "Reopen this help"),
+            ("?", "Full keybinding reference"),
+        ],
     ),
 }
+
+
+def _build_keybinding_table(pairs: list[tuple[str, str]]) -> Table:
+    """Build a borderless Rich Table for key→action pairs."""
+    table = Table(
+        show_header=False,
+        show_edge=False,
+        show_lines=False,
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("Key", style="bold cyan", width=12, justify="right")
+    table.add_column("Action")
+    for key, action in pairs:
+        table.add_row(key, action)
+    return table
 
 
 class ScreenHelpOverlay(DismissibleOverlay):
@@ -68,12 +104,20 @@ class ScreenHelpOverlay(DismissibleOverlay):
 
     def __init__(self, screen_name: str) -> None:
         super().__init__()
-        title, body = SCREEN_HELP.get(screen_name, ("Help", "No help available."))
+        title, prose_lines, key_pairs = SCREEN_HELP.get(
+            screen_name, ("Help", ["No help available."], [])
+        )
         self.title_text = title
-        self._body_markup = body
+        self._prose_lines = prose_lines
+        self._key_pairs = key_pairs
 
     def compose_body(self) -> ComposeResult:
-        yield Static(self._body_markup, id="overlay-body", markup=True)
+        if self._prose_lines:
+            yield Static(
+                "\n".join(self._prose_lines), id="overlay-body", markup=True
+            )
+        if self._key_pairs:
+            yield Static(_build_keybinding_table(self._key_pairs))
 
 
 def show_screen_help_if_first_visit(screen: "Screen", screen_name: str) -> None:
@@ -97,3 +141,8 @@ def show_screen_help_if_first_visit(screen: "Screen", screen_name: str) -> None:
     if screen_name not in visited:
         visited.add(screen_name)
         screen.app.push_screen(ScreenHelpOverlay(screen_name))
+
+
+def recall_screen_help(screen: "Screen", screen_name: str) -> None:
+    """Push a screen help overlay (always, regardless of first-visit state)."""
+    screen.app.push_screen(ScreenHelpOverlay(screen_name))

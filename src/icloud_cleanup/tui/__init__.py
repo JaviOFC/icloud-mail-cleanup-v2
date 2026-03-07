@@ -21,20 +21,20 @@ class CleanupApp(App):
     CSS_PATH = "app.tcss"
 
     MODES = {
+        "pipeline": PipelineScreen,
         "dashboard": DashboardScreen,
         "review": ReviewScreen,
         "execute": ExecuteScreen,
-        "pipeline": PipelineScreen,
     }
     DEFAULT_MODE = "dashboard"
 
     SCREENS = {"help": HelpScreen}
 
     BINDINGS = [
-        Binding("d", "switch_mode('dashboard')", "Dashboard", priority=True),
-        Binding("r", "switch_mode('review')", "Review", priority=True),
-        Binding("e", "switch_mode('execute')", "Execute", priority=True),
-        Binding("p", "switch_mode('pipeline')", "Pipeline", priority=True),
+        Binding("1", "switch_mode('pipeline')", "Pipeline", priority=True),
+        Binding("2", "switch_mode('dashboard')", "Dashboard", priority=True),
+        Binding("3", "switch_mode('review')", "Review", priority=True),
+        Binding("4", "switch_mode('execute')", "Execute", priority=True),
         Binding("question_mark", "push_screen('help')", "Help"),
         Binding("t", "toggle_dark", "Theme"),
         Binding("q", "quit", "Quit"),

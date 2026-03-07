@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Header, ProgressBar, RichLog, Static
 from textual.worker import get_current_worker
 
 from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
-from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
 from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
@@ -26,10 +28,12 @@ class ExecuteScreen(Screen):
     BINDINGS = [
         ("c", "cancel_execution", "Cancel"),
         ("escape", "switch_mode('review')", "Back"),
+        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield ScreenHintBar("execute")
         with Vertical(id="execute-content"):
             yield Static("Loading session data...", id="exec-summary")
             with Horizontal(id="exec-buttons"):
@@ -251,6 +255,9 @@ class ExecuteScreen(Screen):
         from pathlib import Path
 
         return Path.home() / ".icloud-cleanup" / "action_log.db"
+
+    def action_screen_help(self) -> None:
+        recall_screen_help(self, "execute")
 
     def action_cancel_execution(self) -> None:
         """Cancel the running execution worker."""

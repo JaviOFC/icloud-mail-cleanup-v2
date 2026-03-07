@@ -41,7 +41,9 @@ class HelpScreen(ModalScreen):
     }
 
     HelpScreen > #help-container {
-        width: 60;
+        width: 70%;
+        min-width: 60;
+        max-width: 100;
         max-height: 80%;
         background: $surface;
         border: thick $primary;
@@ -61,10 +63,11 @@ class HelpScreen(ModalScreen):
             yield Static("Keyboard Shortcuts", id="help-title")
 
             global_table = _build_section("Global", [
-                ("D", "Dashboard"),
-                ("R", "Review"),
-                ("E", "Execute"),
-                ("P", "Pipeline"),
+                ("1", "Pipeline"),
+                ("2", "Dashboard"),
+                ("3", "Review"),
+                ("4", "Execute"),
+                ("h", "Screen help"),
                 ("T", "Toggle theme"),
                 ("?", "This help"),
                 ("Q", "Quit"),

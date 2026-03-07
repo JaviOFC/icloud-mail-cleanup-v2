@@ -8,10 +8,10 @@ from textual.widgets import Static
 
 # Mode keys and their labels
 MODE_KEYS = [
-    ("d", "Dashboard", "dashboard"),
-    ("r", "Review", "review"),
-    ("e", "Execute", "execute"),
-    ("p", "Pipeline", "pipeline"),
+    ("1", "Pipeline", "pipeline"),
+    ("2", "Dashboard", "dashboard"),
+    ("3", "Review", "review"),
+    ("4", "Execute", "execute"),
 ]
 
 EXTRA_KEYS = [

@@ -6,6 +6,7 @@ import time
 
 from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Header, ProgressBar, Static
@@ -13,7 +14,8 @@ from textual.worker import get_current_worker
 
 from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.pipeline_log import PipelineLogWidget
-from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
 from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
@@ -25,10 +27,12 @@ class PipelineScreen(Screen):
     BINDINGS = [
         ("c", "cancel_pipeline", "Cancel"),
         ("escape", "switch_mode('dashboard')", "Back"),
+        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield ScreenHintBar("pipeline")
         with Vertical(id="pipeline-content"):
             yield Static(
                 "Re-run the analysis pipeline: Scan -> Classify -> Content Analysis.\n"
@@ -367,6 +371,9 @@ class PipelineScreen(Screen):
     def _finish_cancelled(self, log, status) -> None:
         self.app.call_from_thread(log.log_error, "Pipeline cancelled by user.")
         self.app.call_from_thread(status.update, "Pipeline: Cancelled")
+
+    def action_screen_help(self) -> None:
+        recall_screen_help(self, "pipeline")
 
     def action_cancel_pipeline(self) -> None:
         """Cancel the running pipeline worker."""

@@ -36,7 +36,8 @@ from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.cluster_detail import ClusterDetailWidget
 from icloud_cleanup.tui.widgets.cluster_list import ClusterListWidget
 from icloud_cleanup.tui.widgets.propagation_tab import PropagationTabWidget
-from icloud_cleanup.tui.widgets.screen_help import show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
+from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
 
 
 class ReviewScreen(Screen):
@@ -49,7 +50,7 @@ class ReviewScreen(Screen):
         Binding("a", "approve_selected", "Approve", show=True),
         Binding("s", "skip_selected", "Skip", show=True),
         Binding("i", "toggle_inspect", "Inspect", show=True),
-        Binding("question_mark", "help", "Help", show=False),
+        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def __init__(self) -> None:
@@ -61,6 +62,7 @@ class ReviewScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield ScreenHintBar("review")
         with TabbedContent(id="review-tabs"):
             with TabPane("Clusters", id="tab-clusters"):
                 with Horizontal(id="review-split"):
@@ -68,14 +70,14 @@ class ReviewScreen(Screen):
                         yield Static("Clusters", id="cluster-header", classes="section-header")
                         yield ClusterListWidget(id="cluster-table")
                         with Horizontal(id="bulk-actions"):
-                            yield Button("Triage", id="btn-triage", variant="primary")
+                            yield Button("Auto-Sort", id="btn-triage", variant="primary")
                             yield Button("Approve", id="btn-approve", variant="error")
                             yield Button("Skip", id="btn-skip", variant="success")
                             yield Button("API Analyze", id="btn-api", variant="warning")
                     with Vertical(id="right-panel"):
                         yield ClusterDetailWidget(id="cluster-detail")
                 yield Static("Loading...", id="api-status")
-            with TabPane("Propagation", id="tab-propagation"):
+            with TabPane("Similar Senders", id="tab-propagation"):
                 yield PropagationTabWidget(id="propagation-tab")
         yield ActiveFooter()
 
@@ -370,13 +372,8 @@ class ReviewScreen(Screen):
         mode_str = "ON" if self._inspect_active else "OFF"
         self.notify(f"Inspect mode: {mode_str}", severity="information", timeout=2)
 
-    def action_help(self) -> None:
-        self.notify(
-            "Space: select | A: approve | S: skip | I: inspect | ?: help",
-            title="Keybindings",
-            severity="information",
-            timeout=5,
-        )
+    def action_screen_help(self) -> None:
+        recall_screen_help(self, "review")
 
     # --- Background workers ---
 
