@@ -2,6 +2,21 @@
 
 Intelligent iCloud email classification and cleanup tool that replaces Apple Mail's unreliable categorization with multi-signal scoring, MLX content analysis, and interactive review.
 
+## Why This Exists
+
+After 15+ years of iCloud email, my inbox had tens of thousands of messages — newsletters I never unsubscribed from, automated notifications from services I no longer use, marketing blasts mixed in with emails from real people I actually care about.
+
+Apple Mail's built-in categorization is unreliable. It misclassifies personal emails as junk and lets obvious spam through. Third-party cleanup tools either require forwarding your email to external servers (privacy nightmare) or use simplistic sender-based rules that can't distinguish a shipping notification from a marketing blast sent by the same domain.
+
+I needed something that:
+- Runs **entirely on-device** — no email data leaves my machine
+- Goes beyond sender reputation — actually reads email content using **local ML on Apple Silicon**
+- Understands that an email archive is a **data asset**, not just clutter — old friendships, career history, and memories must be protected
+- Lets me **review before deleting** — aggressive classification with zero false positives on things that matter
+- Operates **non-destructively** — moves to Trash (never permanent delete), with full undo capability
+
+This tool is the result: a multi-phase pipeline that combines 8 behavioral signals, GPU-accelerated content embeddings, and interactive review to clean up years of accumulated email safely.
+
 ## What It Does
 
 - Reads the local Envelope Index SQLite database and `.emlx` files (read-only -- never modifies mail data directly)
