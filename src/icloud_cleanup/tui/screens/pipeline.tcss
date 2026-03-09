@@ -30,7 +30,7 @@
 }
 
 #pipeline-spinner {
-    width: 3;
+    width: 4;
     height: 1;
     margin-left: 1;
 }

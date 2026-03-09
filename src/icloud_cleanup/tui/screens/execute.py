@@ -4,16 +4,10 @@ from __future__ import annotations
 
 from textual import work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Header, ProgressBar, RichLog, Static
+from textual.widgets import Button, Footer, Header, LoadingIndicator, ProgressBar, RichLog, Static
 from textual.worker import get_current_worker
-
-from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
-from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
-from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
-from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
 class ExecuteScreen(Screen):
@@ -28,27 +22,30 @@ class ExecuteScreen(Screen):
     BINDINGS = [
         ("c", "cancel_execution", "Cancel"),
         ("escape", "switch_mode('review')", "Back"),
-        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield ScreenHintBar("execute")
         with Vertical(id="execute-content"):
+            yield Static(
+                "Move approved emails to Trash. Start with Dry Run to preview, "
+                "then Execute for Real when ready.",
+                id="exec-description",
+            )
             yield Static("Loading session data...", id="exec-summary")
             with Horizontal(id="exec-buttons"):
                 yield Button("Dry Run", id="btn-dry", variant="primary")
                 yield Button("Execute for Real", id="btn-execute", variant="error")
             with Horizontal(id="exec-progress-row"):
                 yield ProgressBar(id="exec-progress", total=100, show_eta=False)
-                yield SpinnerWidget(id="exec-spinner")
+                yield LoadingIndicator(id="exec-spinner")
             yield Static("Success: 0 | Errors: 0 | Skipped: 0", id="exec-stats")
             yield RichLog(id="exec-log", markup=True, auto_scroll=True, max_lines=500)
-        yield ActiveFooter()
+        yield Footer()
 
     def on_mount(self) -> None:
         self._update_summary()
-        show_screen_help_if_first_visit(self, "execute")
+        self.query_one("#exec-spinner").display = False
 
     def _update_summary(self) -> None:
         """Compute and display summary of approved items from session."""
@@ -68,11 +65,10 @@ class ExecuteScreen(Screen):
         approved_count = len(approved_ids)
         total_size = 0
         if self.app.report_data:
-            # Estimate from classifications
             for mid in approved_ids:
                 cls = classifications.get(mid)
                 if cls is not None:
-                    total_size += 1  # placeholder for size
+                    total_size += 1
 
         cluster_count = sum(
             1 for d in session.decisions.values()
@@ -130,8 +126,8 @@ class ExecuteScreen(Screen):
         progress = self.query_one("#exec-progress", ProgressBar)
         stats_widget = self.query_one("#exec-stats", Static)
 
-        spinner = self.query_one("#exec-spinner", SpinnerWidget)
-        self.app.call_from_thread(spinner.start)
+        spinner = self.query_one("#exec-spinner", LoadingIndicator)
+        self.app.call_from_thread(setattr, spinner, "display", True)
 
         mode = "DRY-RUN" if dry_run else "LIVE"
         self.app.call_from_thread(log_widget.write, f"[bold]Starting execution ({mode})...[/bold]")
@@ -247,7 +243,7 @@ class ExecuteScreen(Screen):
         )
 
         # Stop spinner and re-show buttons
-        self.app.call_from_thread(spinner.stop)
+        self.app.call_from_thread(setattr, spinner, "display", False)
         self.app.call_from_thread(self.query_one("#btn-dry", Button).set_class, False, "hidden")
         self.app.call_from_thread(self.query_one("#btn-execute", Button).set_class, False, "hidden")
 
@@ -255,9 +251,6 @@ class ExecuteScreen(Screen):
         from pathlib import Path
 
         return Path.home() / ".icloud-cleanup" / "action_log.db"
-
-    def action_screen_help(self) -> None:
-        recall_screen_help(self, "execute")
 
     def action_cancel_execution(self) -> None:
         """Cancel the running execution worker."""

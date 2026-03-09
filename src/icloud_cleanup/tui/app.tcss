@@ -29,25 +29,3 @@
 .full-width {
     width: 100%;
 }
-
-/* Help overlay modal */
-HelpScreen {
-    align: center middle;
-}
-
-HelpScreen > #help-container {
-    width: 70%;
-    min-width: 60;
-    max-width: 100;
-    max-height: 80%;
-    background: $surface;
-    border: thick $primary;
-    padding: 1 2;
-}
-
-HelpScreen > #help-container > #help-title {
-    text-align: center;
-    text-style: bold;
-    width: 100%;
-    margin-bottom: 1;
-}

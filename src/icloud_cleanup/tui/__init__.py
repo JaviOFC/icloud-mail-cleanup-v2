@@ -11,8 +11,6 @@ from textual.binding import Binding
 
 from icloud_cleanup.tui.screens import ExecuteScreen, PipelineScreen, ReviewScreen
 from icloud_cleanup.tui.screens.dashboard import DashboardScreen
-from icloud_cleanup.tui.screens.help_overlay import HelpScreen
-from icloud_cleanup.tui.widgets.dismissible_overlay import WelcomeOverlay
 
 
 class CleanupApp(App):
@@ -28,14 +26,11 @@ class CleanupApp(App):
     }
     DEFAULT_MODE = "dashboard"
 
-    SCREENS = {"help": HelpScreen}
-
     BINDINGS = [
         Binding("1", "switch_mode('pipeline')", "Pipeline", priority=True),
         Binding("2", "switch_mode('dashboard')", "Dashboard", priority=True),
         Binding("3", "switch_mode('review')", "Review", priority=True),
         Binding("4", "switch_mode('execute')", "Execute", priority=True),
-        Binding("question_mark", "push_screen('help')", "Help"),
         Binding("t", "toggle_dark", "Theme"),
         Binding("q", "quit", "Quit"),
     ]
@@ -47,8 +42,6 @@ class CleanupApp(App):
     session: Any | None = None
     messages: list[Any] | None = None
     sender_lookup: dict[int, str] | None = None
-    _visited_screens: set[str] | None = None
-    _show_welcome: bool = False
 
     def __init__(
         self,
@@ -63,12 +56,11 @@ class CleanupApp(App):
         self.session_path = session_path
         self.db_path = db_path
         self._show_welcome = show_welcome
-        self._visited_screens = set()
 
     def on_mount(self) -> None:
         self._load_data()
         if self._show_welcome:
-            self.push_screen(WelcomeOverlay())
+            self.notify("Press 1-4 to switch tabs, ? for help", timeout=5)
 
     @work(thread=True)
     def _load_data(self) -> None:

@@ -6,17 +6,12 @@ import time
 
 from textual import work
 from textual.app import ComposeResult
-from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Header, ProgressBar, Static
+from textual.widgets import Button, Footer, Header, LoadingIndicator, ProgressBar, Static
 from textual.worker import get_current_worker
 
-from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.pipeline_log import PipelineLogWidget
-from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
-from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
-from icloud_cleanup.tui.widgets.spinner import SpinnerWidget
 
 
 class PipelineScreen(Screen):
@@ -27,12 +22,10 @@ class PipelineScreen(Screen):
     BINDINGS = [
         ("c", "cancel_pipeline", "Cancel"),
         ("escape", "switch_mode('dashboard')", "Back"),
-        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield ScreenHintBar("pipeline")
         with Vertical(id="pipeline-content"):
             yield Static(
                 "Re-run the analysis pipeline: Scan -> Classify -> Content Analysis.\n"
@@ -43,15 +36,15 @@ class PipelineScreen(Screen):
             yield Static("Pipeline: Ready", id="pipeline-status")
             with Horizontal(id="pipeline-progress-row"):
                 yield ProgressBar(id="pipeline-progress", total=3, show_eta=False)
-                yield SpinnerWidget(id="pipeline-spinner")
+                yield LoadingIndicator(id="pipeline-spinner")
             yield PipelineLogWidget(id="pipeline-log")
             with Horizontal(id="pipeline-buttons"):
                 yield Button("Run Pipeline", id="btn-pipeline", variant="primary")
                 yield Button("Cancel", id="btn-cancel", variant="warning", disabled=True)
-        yield ActiveFooter()
+        yield Footer()
 
     def on_mount(self) -> None:
-        show_screen_help_if_first_visit(self, "pipeline")
+        self.query_one("#pipeline-spinner").display = False
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-pipeline":
@@ -69,8 +62,8 @@ class PipelineScreen(Screen):
         progress = self.query_one("#pipeline-progress", ProgressBar)
         status = self.query_one("#pipeline-status", Static)
 
-        spinner = self.query_one("#pipeline-spinner", SpinnerWidget)
-        self.app.call_from_thread(spinner.start)
+        spinner = self.query_one("#pipeline-spinner", LoadingIndicator)
+        self.app.call_from_thread(setattr, spinner, "display", True)
         self.app.call_from_thread(status.update, "Pipeline: Running...")
         self.app.call_from_thread(progress.update, total=3, progress=0)
 
@@ -212,7 +205,7 @@ class PipelineScreen(Screen):
             self.app.call_from_thread(status.update, "Pipeline: Error")
 
         finally:
-            self.app.call_from_thread(spinner.stop)
+            self.app.call_from_thread(setattr, spinner, "display", False)
             self.app.call_from_thread(
                 self.query_one("#btn-pipeline", Button).__setattr__, "disabled", False
             )
@@ -371,9 +364,6 @@ class PipelineScreen(Screen):
     def _finish_cancelled(self, log, status) -> None:
         self.app.call_from_thread(log.log_error, "Pipeline cancelled by user.")
         self.app.call_from_thread(status.update, "Pipeline: Cancelled")
-
-    def action_screen_help(self) -> None:
-        recall_screen_help(self, "pipeline")
 
     def action_cancel_pipeline(self) -> None:
         """Cancel the running pipeline worker."""

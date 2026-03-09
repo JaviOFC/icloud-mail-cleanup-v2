@@ -910,13 +910,21 @@ def cmd_tui(args: argparse.Namespace) -> None:
 
         session_path = get_session_path()
 
+    # Auto-discover DB if not specified so inspect mode and real sender data work
+    db_path = args.db
+    if db_path is None:
+        from icloud_cleanup.scanner import ENVELOPE_INDEX
+
+        if ENVELOPE_INDEX.exists():
+            db_path = ENVELOPE_INDEX
+
     # Lazy import to avoid textual overhead for non-TUI commands
     from icloud_cleanup.tui import CleanupApp
 
     app = CleanupApp(
         checkpoint_path=checkpoint_path,
         session_path=session_path,
-        db_path=args.db,
+        db_path=db_path,
         show_welcome=True,
     )
     app.run()

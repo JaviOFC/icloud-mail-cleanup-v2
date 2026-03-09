@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from rich.text import Text
 
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.message import Message
 from textual.widgets import Button, DataTable, Static
 
@@ -30,7 +30,7 @@ class PropagationTabWidget(VerticalScroll):
     }
     #prop-empty { text-align: center; margin: 2; }
     #prop-table { height: 1fr; }
-    #prop-actions { height: auto; dock: bottom; padding: 1; }
+    #prop-actions { height: auto; dock: bottom; padding: 1; align: center middle; }
     #prop-actions Button { margin: 0 1; }
     """
 
@@ -45,7 +45,7 @@ class PropagationTabWidget(VerticalScroll):
             id="prop-empty",
         )
         yield DataTable(id="prop-table", cursor_type="row", zebra_stripes=True)
-        with Static(id="prop-actions"):
+        with Horizontal(id="prop-actions"):
             yield Button(
                 "Approve All Selected",
                 id="btn-prop-approve",
@@ -62,9 +62,9 @@ class PropagationTabWidget(VerticalScroll):
         """Append new suggestions and re-render the table."""
         start_idx = len(self.suggestions)
         self.suggestions.extend(new)
-        self._render()
+        self._update_display()
 
-    def _render(self) -> None:
+    def _update_display(self) -> None:
         empty = self.query_one("#prop-empty", Static)
         table = self.query_one("#prop-table", DataTable)
         actions = self.query_one("#prop-actions")
@@ -127,4 +127,4 @@ class PropagationTabWidget(VerticalScroll):
     def clear(self) -> None:
         self.suggestions.clear()
         self._selected.clear()
-        self._render()
+        self._update_display()

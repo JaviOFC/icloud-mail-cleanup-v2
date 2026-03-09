@@ -12,6 +12,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import (
     Button,
+    Footer,
     Header,
     Static,
     TabbedContent,
@@ -32,12 +33,9 @@ from icloud_cleanup.review import (
     load_session,
     save_session,
 )
-from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 from icloud_cleanup.tui.widgets.cluster_detail import ClusterDetailWidget
 from icloud_cleanup.tui.widgets.cluster_list import ClusterListWidget
 from icloud_cleanup.tui.widgets.propagation_tab import PropagationTabWidget
-from icloud_cleanup.tui.widgets.screen_help import recall_screen_help, show_screen_help_if_first_visit
-from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
 
 
 class ReviewScreen(Screen):
@@ -48,9 +46,9 @@ class ReviewScreen(Screen):
     BINDINGS = [
         Binding("space", "toggle_select", "Select", show=True),
         Binding("a", "approve_selected", "Approve", show=True),
+        Binding("r", "reject_selected", "Reject", show=True),
         Binding("s", "skip_selected", "Skip", show=True),
         Binding("i", "toggle_inspect", "Inspect", show=True),
-        Binding("h", "screen_help", "Screen Help", show=False),
     ]
 
     def __init__(self) -> None:
@@ -62,7 +60,6 @@ class ReviewScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield ScreenHintBar("review")
         with TabbedContent(id="review-tabs"):
             with TabPane("Clusters", id="tab-clusters"):
                 with Horizontal(id="review-split"):
@@ -71,19 +68,19 @@ class ReviewScreen(Screen):
                         yield ClusterListWidget(id="cluster-table")
                         with Horizontal(id="bulk-actions"):
                             yield Button("Auto-Sort", id="btn-triage", variant="primary")
-                            yield Button("Approve", id="btn-approve", variant="error")
-                            yield Button("Skip", id="btn-skip", variant="success")
+                            yield Button("Approve", id="btn-approve", variant="success")
+                            yield Button("Reject", id="btn-reject", variant="error")
+                            yield Button("Skip", id="btn-skip", variant="default")
                             yield Button("API Analyze", id="btn-api", variant="warning")
                     with Vertical(id="right-panel"):
                         yield ClusterDetailWidget(id="cluster-detail")
                 yield Static("Loading...", id="api-status")
             with TabPane("Similar Senders", id="tab-propagation"):
                 yield PropagationTabWidget(id="propagation-tab")
-        yield ActiveFooter()
+        yield Footer()
 
     def on_mount(self) -> None:
         self._check_data()
-        show_screen_help_if_first_visit(self, "review")
 
     def _check_data(self) -> None:
         """Wait for app data to load, then populate."""
@@ -143,7 +140,6 @@ class ReviewScreen(Screen):
         """Build message_id -> sender_address mapping."""
         messages = getattr(self.app, "messages", None) or []
         if not messages:
-            # Fallback: build from classifications with empty senders
             return {}
         return {m.message_id: m.sender_address for m in messages}
 
@@ -227,6 +223,8 @@ class ReviewScreen(Screen):
         button_id = event.button.id
         if button_id == "btn-approve":
             self.action_approve_selected()
+        elif button_id == "btn-reject":
+            self.action_reject_selected()
         elif button_id == "btn-skip":
             self.action_skip_selected()
         elif button_id == "btn-triage":
@@ -324,6 +322,37 @@ class ReviewScreen(Screen):
             severity="information",
         )
 
+    def action_reject_selected(self) -> None:
+        """Reject selected clusters — override their tier classification to Keep."""
+        cluster_table = self.query_one("#cluster-table", ClusterListWidget)
+        selected = cluster_table.get_selected()
+        if not selected:
+            self.notify("No clusters selected. Use Space to select.", severity="warning")
+            return
+
+        session = self._ensure_session()
+        ts = int(time.time())
+        newly_decided: set[str] = set()
+
+        for label in selected:
+            cluster_cls = self._cluster_classifications.get(label, [])
+            message_ids = [c.message_id for c in cluster_cls]
+            session.decisions[label] = {
+                "action": "reject",
+                "message_ids": message_ids,
+                "timestamp": ts,
+            }
+            newly_decided.add(label)
+
+        self._save_session()
+        cluster_table.mark_decided(newly_decided)
+        self._update_api_status()
+        self.notify(
+            f"Rejected {len(selected)} cluster(s) — emails will be kept.",
+            title="Rejected",
+            severity="information",
+        )
+
     def action_skip_selected(self) -> None:
         cluster_table = self.query_one("#cluster-table", ClusterListWidget)
         selected = cluster_table.get_selected()
@@ -371,9 +400,6 @@ class ReviewScreen(Screen):
 
         mode_str = "ON" if self._inspect_active else "OFF"
         self.notify(f"Inspect mode: {mode_str}", severity="information", timeout=2)
-
-    def action_screen_help(self) -> None:
-        recall_screen_help(self, "review")
 
     # --- Background workers ---
 

@@ -158,7 +158,7 @@ class TestBuildReportData:
 
         data = build_report_data(classifications, messages)
         cluster = data["tiers"]["review"]["clusters"][0]
-        assert 3 <= len(cluster["example_subjects"]) <= 5
+        assert 3 <= len(cluster["example_subjects"]) <= 30
 
     def test_cluster_sender_breakdown(self) -> None:
         classifications = [

@@ -107,14 +107,14 @@ def build_report_data(
             for m in item_msgs:
                 sender_counts[m.sender_address] += 1
 
-            # Example subjects (up to 5 unique)
+            # Example subjects (up to 30 unique)
             subjects = []
             seen: set[str] = set()
             for m in item_msgs:
                 if m.subject not in seen:
                     subjects.append(m.subject)
                     seen.add(m.subject)
-                if len(subjects) >= 5:
+                if len(subjects) >= 30:
                     break
 
             # Date range

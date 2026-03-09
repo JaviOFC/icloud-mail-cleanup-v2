@@ -125,131 +125,25 @@ async def test_dashboard_shows_storage_banner(tmp_path: Path) -> None:
         assert widget is not None
 
 
-# --- Active footer tests ---
-
-
 @pytest.mark.asyncio
-async def test_active_footer_highlights_current_mode(tmp_path: Path) -> None:
-    """ActiveFooter should render with the current mode highlighted."""
+async def test_footer_present(tmp_path: Path) -> None:
+    """Each screen should have a Textual Footer widget."""
+    from textual.widgets import Footer
+
     from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.widgets.active_footer import ActiveFooter
 
     checkpoint_path = _write_test_checkpoint(tmp_path)
     app = CleanupApp(checkpoint_path=checkpoint_path)
 
     async with app.run_test(size=(120, 40)) as pilot:
-        footer = app.query_one(ActiveFooter)
+        footer = app.query_one(Footer)
         assert footer is not None
-        # Default mode is dashboard
-        assert app.current_mode == "dashboard"
 
         # Switch to review
         await pilot.press("3")
         await pilot.pause(delay=0.5)
-        assert app.current_mode == "review"
-
-
-# --- Welcome overlay tests ---
-
-
-@pytest.mark.asyncio
-async def test_welcome_overlay_shown_on_launch(tmp_path: Path) -> None:
-    """Welcome overlay should appear on first launch."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.widgets.dismissible_overlay import WelcomeOverlay
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        assert isinstance(app.screen, WelcomeOverlay)
-
-
-@pytest.mark.asyncio
-async def test_welcome_overlay_dismisses_on_keypress(tmp_path: Path) -> None:
-    """Any keypress should dismiss the welcome overlay."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.screens.dashboard import DashboardScreen
-    from icloud_cleanup.tui.widgets.dismissible_overlay import WelcomeOverlay
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        assert isinstance(app.screen, WelcomeOverlay)
-        await pilot.press("enter")
-        assert isinstance(app.screen, DashboardScreen)
-
-
-# --- Per-screen contextual help tests ---
-
-
-@pytest.mark.asyncio
-async def test_screen_help_shown_on_first_visit(tmp_path: Path) -> None:
-    """Switching to Review for the first time should show contextual help."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.widgets.screen_help import ScreenHelpOverlay
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path, show_welcome=True)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        # Dismiss welcome overlay
-        await pilot.press("enter")
-        await pilot.pause(delay=0.3)
-
-        # Switch to review -- should show screen help
-        await pilot.press("3")
-        await pilot.pause(delay=0.3)
-        assert isinstance(app.screen, ScreenHelpOverlay)
-
-        # Dismiss screen help
-        await pilot.press("enter")
-        await pilot.pause(delay=0.3)
-
-        # Go back to dashboard, then to review again -- no overlay
-        await pilot.press("2")
-        await pilot.pause(delay=0.1)
-        await pilot.press("3")
-        await pilot.pause(delay=0.3)
-        # Should NOT show help again
-        from icloud_cleanup.tui.screens.review import ReviewScreen
-        assert isinstance(app.screen, ReviewScreen)
-
-
-# --- Help overlay tests ---
-
-
-@pytest.mark.asyncio
-async def test_help_overlay_opens(tmp_path: Path) -> None:
-    """Pressing ? should push the HelpScreen modal."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.screens.help_overlay import HelpScreen
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("question_mark")
-        assert isinstance(app.screen, HelpScreen)
-
-
-@pytest.mark.asyncio
-async def test_help_overlay_closes(tmp_path: Path) -> None:
-    """Opening help and pressing Escape should return to previous screen."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.screens.dashboard import DashboardScreen
-    from icloud_cleanup.tui.screens.help_overlay import HelpScreen
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        await pilot.press("question_mark")
-        assert isinstance(app.screen, HelpScreen)
-
-        await pilot.press("escape")
-        assert isinstance(app.screen, DashboardScreen)
+        footer = app.query_one(Footer)
+        assert footer is not None
 
 
 @pytest.mark.asyncio
@@ -740,42 +634,3 @@ async def test_pipeline_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         status_text = str(status.renderable)
         # Should be Complete or Error (step 3 may fail without MLX)
         assert "Complete" in status_text or "Error" in status_text or "Running" in status_text
-
-
-# --- Screen help recall tests ---
-
-
-@pytest.mark.asyncio
-async def test_screen_help_recallable_with_h(tmp_path: Path) -> None:
-    """Pressing h should open screen help overlay on any screen."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.widgets.screen_help import ScreenHelpOverlay
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        # On dashboard, press h
-        await pilot.press("h")
-        await pilot.pause(delay=0.3)
-        assert isinstance(app.screen, ScreenHelpOverlay)
-
-
-@pytest.mark.asyncio
-async def test_screen_hint_bar_present(tmp_path: Path) -> None:
-    """Each screen should have a ScreenHintBar widget."""
-    from icloud_cleanup.tui import CleanupApp
-    from icloud_cleanup.tui.widgets.screen_hint import ScreenHintBar
-
-    checkpoint_path = _write_test_checkpoint(tmp_path)
-    app = CleanupApp(checkpoint_path=checkpoint_path)
-
-    async with app.run_test(size=(120, 40)) as pilot:
-        # Dashboard
-        hint = app.query_one(ScreenHintBar)
-        assert hint is not None
-
-        # Pipeline
-        await pilot.press("1")
-        hint = app.query_one(ScreenHintBar)
-        assert hint is not None

@@ -4,6 +4,13 @@
     padding: 1;
 }
 
+#exec-description {
+    text-align: center;
+    height: auto;
+    margin: 1 4;
+    color: $text-muted;
+}
+
 #exec-summary {
     text-align: center;
     text-style: bold;
@@ -23,7 +30,7 @@
 
 #exec-progress-row {
     height: auto;
-    margin: 1 4;
+    margin: 1 2;
     align: center middle;
 }
 
@@ -32,7 +39,7 @@
 }
 
 #exec-spinner {
-    width: 3;
+    width: 4;
     height: 1;
     margin-left: 1;
 }
