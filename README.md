@@ -114,7 +114,10 @@ uv run python -m icloud_cleanup review --reset     # discard session and start f
 
 Launches a web-based review UI for deciding on classified emails. Features:
 - Cluster sidebar with progress indicators
+- Inline Delete/Keep buttons on every row — no need to expand or navigate
 - Bulk actions: select and trash/keep multiple emails at once
+- Shift+click checkbox for range selection between rows
+- Hover preview popover: sender, subject, and body snippet on mouseover
 - Domain and tier filtering, confidence range slider
 - Keyboard shortcuts (j/k navigate, d/k/u decide, x toggle select)
 - Compact and sender-grouped view modes
