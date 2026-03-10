@@ -214,19 +214,16 @@ header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
 
 /* Bulk actions — floating */
 .bulk-bar {
-  position: fixed;
-  bottom: 48px;
-  left: 280px;
-  right: 0;
+  position: sticky;
+  top: 0;
   background: var(--surface2);
-  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 8px 16px;
   display: none;
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  z-index: 30;
-  box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+  z-index: 25;
 }
 .bulk-bar.visible { display: flex; }
 button {
@@ -250,7 +247,6 @@ button.safe:hover { background: rgba(81,207,102,0.15); }
   flex: 1;
   overflow-y: auto;
 }
-.email-table-wrap.has-bulk-bar { padding-bottom: 52px; }
 table {
   width: 100%;
   border-collapse: collapse;
@@ -276,7 +272,10 @@ tbody tr {
   cursor: pointer;
   transition: background 0.1s, opacity 0.15s;
 }
+tbody tr:nth-child(even) { background: var(--surface); }
+tbody tr:nth-child(odd) { background: var(--bg); }
 tbody tr:hover { background: var(--surface2); }
+tbody tr.selected { background: rgba(99,179,237,0.25) !important; }
 tbody tr.decided-trash { opacity: 0.5; }
 tbody tr.decided-keep { background: rgba(81,207,102,0.05); }
 tbody tr.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -874,15 +873,14 @@ thead th.sortable:hover { color: var(--text); }
         <button class="undo" id="btnClusterReset" title="Clear all decisions in this cluster.">Reset cluster</button>
       </div>
 
-      <div class="bulk-bar" id="bulkBar">
-        <span id="selectedCount">0</span> selected
-        <button class="danger" id="btnTrashSelected" title="Mark checked emails for deletion">Delete selected</button>
-        <button class="safe" id="btnKeepSelected" title="Mark checked emails to keep">Keep selected</button>
-        <button id="btnSelectAllDomain">Select all from domain</button>
-        <button id="btnDeselectAll">Deselect all</button>
-      </div>
-
       <div class="email-table-wrap" id="emailTableWrap">
+        <div class="bulk-bar" id="bulkBar">
+          <span id="selectedCount">0</span> selected
+          <button class="danger" id="btnTrashSelected" title="Mark checked emails for deletion">Delete selected</button>
+          <button class="safe" id="btnKeepSelected" title="Mark checked emails to keep">Keep selected</button>
+          <button id="btnSelectAllDomain">Select all from domain</button>
+          <button id="btnDeselectAll">Deselect all</button>
+        </div>
         <table>
           <thead>
             <tr>
@@ -1206,13 +1204,15 @@ function renderEmails() {
   state.emails.forEach((e, idx) => {
     const decClass = e.decision === 'approve' ? 'decided-trash' : e.decision === 'skip' ? 'decided-keep' : '';
     const focusClass = idx === state.focusedRow ? ' focused' : '';
-    const tr = el('tr', { className: (decClass + focusClass).trim(), 'data-mid': String(e.message_id), 'data-idx': String(idx) });
+    const selClass = state.selected.has(e.message_id) ? ' selected' : '';
+    const tr = el('tr', { className: (decClass + focusClass + selClass).trim(), 'data-mid': String(e.message_id), 'data-idx': String(idx) });
 
     // Checkbox
     const cb = el('input', { type: 'checkbox', 'data-mid': String(e.message_id) });
     if (state.selected.has(e.message_id)) cb.checked = true;
     cb.addEventListener('change', () => {
       if (cb.checked) state.selected.add(e.message_id); else state.selected.delete(e.message_id);
+      tr.classList.toggle('selected', cb.checked);
       updateBulkBar();
     });
     tr.appendChild(el('td', { className: 'cb' }, [cb]));
@@ -1494,7 +1494,6 @@ function updateBulkBar() {
   const count = state.selected.size;
   bar.classList.toggle('visible', count > 0);
   document.getElementById('selectedCount').textContent = String(count);
-  document.getElementById('emailTableWrap').classList.toggle('has-bulk-bar', count > 0);
 }
 
 function updateClusterActions() {
@@ -1878,6 +1877,7 @@ document.getElementById('selectAll').addEventListener('change', (e) => {
   const checked = e.target.checked;
   state.emails.forEach(em => { if (checked) state.selected.add(em.message_id); else state.selected.delete(em.message_id); });
   document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('#emailBody > tr:not(.expand-row)').forEach(tr => tr.classList.toggle('selected', checked));
   updateBulkBar();
 });
 
@@ -1886,6 +1886,7 @@ document.getElementById('btnKeepSelected').addEventListener('click', () => bulkD
 document.getElementById('btnDeselectAll').addEventListener('click', () => {
   state.selected.clear();
   document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#emailBody > tr:not(.expand-row)').forEach(tr => tr.classList.remove('selected'));
   updateBulkBar();
 });
 document.getElementById('btnSelectAllDomain').addEventListener('click', () => {
@@ -1895,7 +1896,10 @@ document.getElementById('btnSelectAllDomain').addEventListener('click', () => {
   document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => {
     const mid = cb.getAttribute('data-mid');
     const em = state.emails.find(e => e.message_id === mid);
-    if (em && em.domain === domain) cb.checked = true;
+    if (em && em.domain === domain) {
+      cb.checked = true;
+      cb.closest('tr').classList.add('selected');
+    }
   });
   updateBulkBar();
 });
