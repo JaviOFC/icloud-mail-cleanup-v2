@@ -21,22 +21,29 @@ log = logging.getLogger(__name__)
 _KEEP_TIERS = {Tier.KEEP_ACTIVE, Tier.KEEP_HISTORICAL}
 
 
+_MAX_CLUSTER_SIZE = 500
+
+
 def cluster_embeddings(
     embeddings: np.ndarray,
     min_cluster_size: int = 25,
     min_samples: int = 10,
+    max_cluster_size: int = _MAX_CLUSTER_SIZE,
 ) -> np.ndarray:
     """Cluster embedding vectors using HDBSCAN with cosine metric.
+
+    Oversized clusters (> max_cluster_size) are automatically sub-clustered
+    with tighter parameters to produce more granular groups.
 
     Args:
         embeddings: (N, dim) array of L2-normalized embeddings.
         min_cluster_size: Minimum points to form a cluster.
         min_samples: Core distance parameter (controls noise sensitivity).
+        max_cluster_size: Clusters larger than this get sub-clustered.
 
     Returns:
         (N,) integer array of cluster labels (-1 = noise).
     """
-    # HDBSCAN requires min_samples <= n_samples; if too few points, all are noise
     n_samples_available = embeddings.shape[0]
     if n_samples_available < max(min_cluster_size, min_samples):
         log.info("Too few points (%d) for clustering -- all marked as noise", n_samples_available)
@@ -46,7 +53,7 @@ def cluster_embeddings(
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
         metric="cosine",
-        cluster_selection_method="eom",
+        cluster_selection_method="leaf",
         n_jobs=-1,
     )
     labels = clusterer.fit_predict(embeddings)
@@ -59,6 +66,70 @@ def cluster_embeddings(
     if noise_frac > 0.5:
         log.warning("High noise fraction (%.1f%%) -- consider lowering min_cluster_size", noise_frac * 100)
 
+    # Sub-cluster oversized clusters
+    labels = _subcluster_oversized(embeddings, labels, max_cluster_size)
+
+    return labels
+
+
+def _subcluster_oversized(
+    embeddings: np.ndarray,
+    labels: np.ndarray,
+    max_size: int,
+) -> np.ndarray:
+    """Re-cluster any cluster exceeding max_size with tighter parameters."""
+    labels = labels.copy()
+    next_id = int(labels.max()) + 1 if len(labels) > 0 else 0
+
+    cluster_ids = sorted(set(labels) - {-1})
+    for cid in cluster_ids:
+        mask = labels == cid
+        size = int(mask.sum())
+        if size <= max_size:
+            continue
+
+        log.info("Sub-clustering cluster %d (%d points, max=%d)", cid, size, max_size)
+        indices = np.where(mask)[0]
+        sub_embeddings = embeddings[indices]
+
+        n_sub_points = sub_embeddings.shape[0]
+        if n_sub_points < 30:
+            log.info("  -> too few points (%d) for sub-clustering, keeping as-is", n_sub_points)
+            continue
+
+        sub_min_cluster = min(max(15, size // 100), n_sub_points // 2)
+        sub_min_samples = min(max(5, sub_min_cluster // 3), n_sub_points // 2)
+
+        try:
+            sub_clusterer = HDBSCAN(
+                min_cluster_size=sub_min_cluster,
+                min_samples=sub_min_samples,
+                metric="cosine",
+                cluster_selection_method="leaf",
+                n_jobs=-1,
+            )
+            sub_labels = sub_clusterer.fit_predict(sub_embeddings)
+        except ValueError as exc:
+            log.warning("  -> sub-clustering failed (%s), keeping as-is", exc)
+            continue
+
+        n_sub = len(set(sub_labels) - {-1})
+        sub_noise = int(np.sum(sub_labels == -1))
+        log.info("  -> %d sub-clusters, %d noise from %d points", n_sub, sub_noise, size)
+
+        if n_sub <= 1:
+            # Sub-clustering didn't help — keep original assignment
+            continue
+
+        for i, idx in enumerate(indices):
+            if sub_labels[i] == -1:
+                labels[idx] = -1
+            else:
+                labels[idx] = next_id + sub_labels[i]
+        next_id += n_sub
+
+    final_clusters = len(set(labels) - {-1})
+    log.info("After sub-clustering: %d total clusters", final_clusters)
     return labels
 
 

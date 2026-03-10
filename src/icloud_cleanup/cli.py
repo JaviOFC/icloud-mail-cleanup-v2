@@ -268,10 +268,23 @@ def cmd_classify(args: argparse.Namespace) -> None:
             existing = load_checkpoint(args.checkpoint)
             console.print(f"Loaded [bold]{len(existing):,}[/bold] existing classifications (incremental mode)\n")
 
+        # Step 2c: Load feedback (if available)
+        from icloud_cleanup.feedback import DEFAULT_FEEDBACK_DB, FeedbackStore
+
+        sender_feedback: dict[str, tuple[int, int]] | None = None
+        if DEFAULT_FEEDBACK_DB.exists():
+            fb_store = FeedbackStore(DEFAULT_FEEDBACK_DB)
+            sender_feedback = fb_store.get_all()
+            fb_store.close()
+            if sender_feedback:
+                console.print(f"Loaded feedback for [bold]{len(sender_feedback):,}[/bold] senders\n")
+            else:
+                sender_feedback = None
+
         # Step 4: Classify with progress bar
         now = int(time.time())
         classifications = classify_with_progress(
-            messages, lambda msg: classify_single(msg, profiles, replied_conv_ids, now)
+            messages, lambda msg: classify_single(msg, profiles, replied_conv_ids, now, feedback=sender_feedback)
         )
 
         # Step 5: Merge if incremental
@@ -296,6 +309,8 @@ def cmd_classify(args: argparse.Namespace) -> None:
     # Step 9: Chain into analyze if requested
     if args.analyze:
         console.print("\n[bold]Continuing to content analysis...[/bold]\n")
+        if not hasattr(args, "mail_dir"):
+            args.mail_dir = None
         cmd_analyze(args)
 
 
@@ -919,6 +934,37 @@ def cmd_execute(args: argparse.Namespace) -> None:
             console.print(
                 "\n[yellow]Dry-run mode. Run with --execute to carry out deletions.[/yellow]"
             )
+        else:
+            # Record feedback for future classification runs
+            from icloud_cleanup.feedback import FeedbackStore
+
+            fb_items: list[tuple[str, str]] = []
+            for msg in approved_messages:
+                cls = approved_classifications.get(msg.message_id)
+                if cls is None:
+                    continue
+                action = "trash" if cls.tier == Tier.TRASH else "keep"
+                fb_items.append((msg.sender_address, action))
+
+            # Also record keeps from session (items reviewed but not approved)
+            conn2 = open_db(args.db)
+            try:
+                all_msgs = scan_messages(conn2)
+            finally:
+                conn2.close()
+            msg_addr = {m.message_id: m.sender_address for m in all_msgs}
+            for mid_str, decision in session.individual_decisions.items():
+                mid = int(mid_str)
+                if decision.get("action") == "skip" and mid not in approved_ids:
+                    addr = msg_addr.get(mid)
+                    if addr:
+                        fb_items.append((addr, "keep"))
+
+            if fb_items:
+                fb_store = FeedbackStore()
+                fb_store.record_batch(fb_items)
+                fb_store.close()
+                console.print(f"\nRecorded feedback for [bold]{len(fb_items):,}[/bold] senders")
     finally:
         action_log.close()
 

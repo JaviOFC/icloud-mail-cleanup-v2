@@ -15,11 +15,14 @@ from icloud_cleanup.models import (
 from icloud_cleanup.classifier import (
     ACTIVE_RECENCY_DAYS,
     APPLE_CATEGORY_WEIGHT,
+    APPLE_HIGH_IMPACT_WEIGHT,
     AUTOMATION_WEIGHT,
     CONTACT_WEIGHT,
     FLAGGED_WEIGHT,
     FREQUENCY_WEIGHT,
     KEEP_THRESHOLD,
+    MAILING_LIST_WEIGHT,
+    NOREPLY_WEIGHT,
     RECENCY_WEIGHT,
     REPLY_RATE_WEIGHT,
     TRASH_THRESHOLD,
@@ -107,16 +110,16 @@ def _make_profile(
 class TestComputeSignals:
     """Tests for compute_signals()."""
 
-    def test_returns_7_signal_results(self):
-        """compute_signals returns exactly 7 SignalResult objects (read_rate dropped)."""
+    def test_returns_10_signal_results(self):
+        """compute_signals returns exactly 10 SignalResult objects (without feedback)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
-        assert len(signals) == 7
+        assert len(signals) == 10
         assert all(isinstance(s, SignalResult) for s in signals)
 
     def test_signal_names_match_spec(self):
-        """All 7 signal names match the spec (read_rate excluded)."""
+        """All 10 signal names match the spec (without feedback)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
@@ -127,8 +130,11 @@ class TestComputeSignals:
             "recency_score",
             "reply_rate_signal",
             "apple_category_signal",
+            "apple_high_impact_signal",
             "automation_signal",
             "flagged_signal",
+            "mailing_list_signal",
+            "noreply_signal",
         }
         assert names == expected
 
@@ -143,8 +149,11 @@ class TestComputeSignals:
         assert weight_map["recency_score"] == RECENCY_WEIGHT
         assert weight_map["reply_rate_signal"] == REPLY_RATE_WEIGHT
         assert weight_map["apple_category_signal"] == APPLE_CATEGORY_WEIGHT
+        assert weight_map["apple_high_impact_signal"] == APPLE_HIGH_IMPACT_WEIGHT
         assert weight_map["automation_signal"] == AUTOMATION_WEIGHT
         assert weight_map["flagged_signal"] == FLAGGED_WEIGHT
+        assert weight_map["mailing_list_signal"] == MAILING_LIST_WEIGHT
+        assert weight_map["noreply_signal"] == NOREPLY_WEIGHT
 
     def test_contact_score_bidirectional(self):
         """Bidirectional contact produces contact_score = 1.0."""
@@ -179,23 +188,23 @@ class TestComputeSignals:
         # min(1.0, 100/20) = 1.0
         assert freq.value == pytest.approx(1.0, abs=0.01)
 
-    def test_frequency_score_unknown_high_volume_penalized(self):
-        """Unknown sender with high volume gets penalized (newsletter pattern)."""
+    def test_frequency_score_unknown_high_volume_capped(self):
+        """Unknown sender with high volume caps at 0.3."""
         msg = _make_message()
         profile = _make_profile(is_bidirectional=False, times_sent_to=0, times_received_from=100)
         signals = compute_signals(msg, profile)
         freq = next(s for s in signals if s.name == "frequency_score")
-        # max(0.0, 1.0 - 100/50) = 0.0
-        assert freq.value == pytest.approx(0.0, abs=0.01)
+        # min(0.3, 100/50) = 0.3
+        assert freq.value == pytest.approx(0.3, abs=0.01)
 
     def test_frequency_score_unknown_low_volume(self):
-        """Unknown sender with low volume gets moderate frequency_score."""
+        """Unknown sender with low volume gets low frequency_score (trash-leaning)."""
         msg = _make_message()
         profile = _make_profile(is_bidirectional=False, times_sent_to=0, times_received_from=5)
         signals = compute_signals(msg, profile)
         freq = next(s for s in signals if s.name == "frequency_score")
-        # max(0.0, 1.0 - 5/50) = 0.9
-        assert freq.value == pytest.approx(0.9, abs=0.01)
+        # min(0.3, 5/50) = 0.1
+        assert freq.value == pytest.approx(0.1, abs=0.01)
 
     def test_recency_score_zero_age(self):
         """Message received just now has recency_score near 1.0."""

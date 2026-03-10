@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 
 from icloud_cleanup.contacts import check_protection_override, is_protected
@@ -15,13 +16,21 @@ from icloud_cleanup.models import (
 )
 
 # Signal weights — read_rate dropped (unreliable due to bulk mark-as-read)
-CONTACT_WEIGHT = 0.30
-FREQUENCY_WEIGHT = 0.15
-RECENCY_WEIGHT = 0.15
-REPLY_RATE_WEIGHT = 0.20
-APPLE_CATEGORY_WEIGHT = 0.05
-AUTOMATION_WEIGHT = 0.10
-FLAGGED_WEIGHT = 0.05
+CONTACT_WEIGHT = 0.20
+FREQUENCY_WEIGHT = 0.10
+RECENCY_WEIGHT = 0.10
+REPLY_RATE_WEIGHT = 0.12
+APPLE_CATEGORY_WEIGHT = 0.10
+APPLE_HIGH_IMPACT_WEIGHT = 0.05
+AUTOMATION_WEIGHT = 0.08
+FLAGGED_WEIGHT = 0.04
+MAILING_LIST_WEIGHT = 0.05
+NOREPLY_WEIGHT = 0.03
+FEEDBACK_WEIGHT = 0.10
+
+_NOREPLY_PATTERN = re.compile(
+    r"(noreply|no-reply|donotreply|do-not-reply|mailer-daemon)", re.IGNORECASE,
+)
 
 # Tier thresholds
 TRASH_THRESHOLD = 0.70
@@ -46,11 +55,15 @@ _APPLE_CATEGORY_MAP: dict[int | None, float] = {
 def compute_signals(
     message: Message,
     profile: ContactProfile,
+    feedback: dict[str, tuple[int, int]] | None = None,
 ) -> list[SignalResult]:
     """Compute scoring signals for a message.
 
     Returns a list of SignalResult objects with values in [0, 1].
     read_rate is excluded — bulk mark-as-read makes it unreliable.
+
+    feedback: optional {address: (trash_count, keep_count)} from FeedbackStore.
+    When None, the feedback signal is omitted and weights auto-normalize.
     """
     now = time.time()
 
@@ -73,7 +86,7 @@ def compute_signals(
 
     # 2. Frequency score: volume-based, direction-aware
     #    Known contacts: volume is positive (they email you and you care)
-    #    Unknown senders: high volume is negative (newsletter/spam pattern)
+    #    Unknown senders: low volume is trash-leaning (one-off junk pattern)
     if profile.is_bidirectional:
         freq_val = min(1.0, profile.times_received_from / 20)
         freq_expl = f"bidirectional, volume={profile.times_received_from}/20"
@@ -81,8 +94,8 @@ def compute_signals(
         freq_val = min(1.0, profile.times_received_from / 20) * 0.5
         freq_expl = f"sent-to-only, volume={profile.times_received_from}/20 * 0.5"
     else:
-        freq_val = max(0.0, 1.0 - profile.times_received_from / 50)
-        freq_expl = f"unknown, inverse_volume=1-{profile.times_received_from}/50"
+        freq_val = min(0.3, profile.times_received_from / 50)
+        freq_expl = f"unknown, volume={profile.times_received_from}/50 capped 0.3"
 
     # 3. Recency score: exponential decay
     age_days = (now - message.date_received) / 86400
@@ -97,7 +110,15 @@ def compute_signals(
     apple_val = _APPLE_CATEGORY_MAP.get(message.model_category, 0.5)
     apple_expl = f"model_category={message.model_category} -> {apple_val}"
 
-    # 6. Automation signal: penalize automated + unsubscribe
+    # 6. Apple high-impact signal
+    if message.model_high_impact == 1:
+        hi_val = 0.9
+        hi_expl = "model_high_impact=1 (Apple thinks important)"
+    else:
+        hi_val = 0.5
+        hi_expl = f"model_high_impact={message.model_high_impact} (neutral)"
+
+    # 7. Automation signal: penalize automated + unsubscribe
     if message.automated_conversation > 0:
         auto_val = 0.0
         auto_expl = "automated conversation"
@@ -108,19 +129,55 @@ def compute_signals(
         auto_val = max(0.0, auto_val - 0.5)
         auto_expl += f", has unsubscribe (type={message.unsubscribe_type})"
 
-    # 7. Flagged signal
+    # 8. Flagged signal
     flagged_val = 1.0 if profile.flagged_count > 0 else 0.0
     flagged_expl = f"flagged_count={profile.flagged_count}"
 
-    return [
+    # 9. Mailing list signal
+    if message.list_id_hash is not None:
+        ml_val = 0.1
+        ml_expl = "list_id_hash present (mailing list)"
+    else:
+        ml_val = 0.5
+        ml_expl = "no list_id_hash (neutral)"
+
+    # 10. Noreply signal
+    addr_lower = message.sender_address.lower()
+    if _NOREPLY_PATTERN.search(addr_lower):
+        nr_val = 0.1
+        nr_expl = f"noreply pattern in {addr_lower}"
+    else:
+        nr_val = 0.5
+        nr_expl = "no noreply pattern (neutral)"
+
+    signals = [
         SignalResult("contact_score", contact_val, CONTACT_WEIGHT, contact_expl),
         SignalResult("frequency_score", freq_val, FREQUENCY_WEIGHT, freq_expl),
         SignalResult("recency_score", recency_val, RECENCY_WEIGHT, recency_expl),
         SignalResult("reply_rate_signal", reply_rate_val, REPLY_RATE_WEIGHT, reply_rate_expl),
         SignalResult("apple_category_signal", apple_val, APPLE_CATEGORY_WEIGHT, apple_expl),
+        SignalResult("apple_high_impact_signal", hi_val, APPLE_HIGH_IMPACT_WEIGHT, hi_expl),
         SignalResult("automation_signal", auto_val, AUTOMATION_WEIGHT, auto_expl),
         SignalResult("flagged_signal", flagged_val, FLAGGED_WEIGHT, flagged_expl),
+        SignalResult("mailing_list_signal", ml_val, MAILING_LIST_WEIGHT, ml_expl),
+        SignalResult("noreply_signal", nr_val, NOREPLY_WEIGHT, nr_expl),
     ]
+
+    # 11. Feedback signal (optional — omitted when no feedback data available)
+    if feedback is not None:
+        fb = feedback.get(addr_lower)
+        if fb is not None:
+            trash_count, keep_count = fb
+            fb_val = (keep_count + 1) / (keep_count + trash_count + 2)
+            fb_expl = f"feedback trash={trash_count} keep={keep_count} -> {fb_val:.2f}"
+        else:
+            fb_val = 0.5
+            fb_expl = "no feedback for sender (neutral)"
+        signals.append(
+            SignalResult("feedback_signal", fb_val, FEEDBACK_WEIGHT, fb_expl)
+        )
+
+    return signals
 
 
 def compute_confidence(signals: list[SignalResult]) -> tuple[float, str]:
@@ -185,6 +242,7 @@ def classify_single(
     profiles: dict[str, ContactProfile],
     replied_conv_ids: set[int],
     now: int | None = None,
+    feedback: dict[str, tuple[int, int]] | None = None,
 ) -> Classification:
     """Classify a single message and return a Classification."""
     if now is None:
@@ -205,7 +263,7 @@ def classify_single(
             is_bidirectional=False,
         )
 
-    signals = compute_signals(msg, profile)
+    signals = compute_signals(msg, profile, feedback=feedback)
     confidence, explanation = compute_confidence(signals)
     protected = is_protected(msg, profile, replied_conv_ids)
     overridden = check_protection_override(profile) if protected else False
@@ -309,7 +367,8 @@ def classify_messages(
     messages: list[Message],
     profiles: dict[str, ContactProfile],
     replied_conv_ids: set[int],
+    feedback: dict[str, tuple[int, int]] | None = None,
 ) -> list[Classification]:
     """Classify every message and return a list of Classification objects."""
     now = int(time.time())
-    return [classify_single(msg, profiles, replied_conv_ids, now) for msg in messages]
+    return [classify_single(msg, profiles, replied_conv_ids, now, feedback=feedback) for msg in messages]
