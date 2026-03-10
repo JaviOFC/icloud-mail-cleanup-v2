@@ -25,7 +25,18 @@ def open_db(path: Path | None = None) -> sqlite3.Connection:
 
 def scan_messages(conn: sqlite3.Connection) -> list[Message]:
     """Bulk-extract all iCloud messages as typed Message objects."""
-    query = """
+    # Detect if server_messages table exists (absent in older Mail versions)
+    has_server_messages = False
+    try:
+        conn.execute("SELECT 1 FROM server_messages LIMIT 1")
+        has_server_messages = True
+    except sqlite3.OperationalError:
+        pass
+
+    sm_join = "LEFT JOIN server_messages sm ON sm.message = m.ROWID" if has_server_messages else ""
+    sm_select = "COALESCE(sm.junk_level, 0) as junk_level," if has_server_messages else "0 as junk_level,"
+
+    query = f"""
     SELECT
         m.ROWID as rowid,
         m.message_id,
@@ -43,12 +54,16 @@ def scan_messages(conn: sqlite3.Connection) -> list[Message]:
         COALESCE(s.subject, '') as subject,
         mb.url as mailbox_url,
         mgd.model_category,
-        mgd.model_high_impact
+        mgd.model_high_impact,
+        {sm_select}
+        COALESCE(mgd.urgent, 0) as urgent,
+        mgd.model_subcategory
     FROM messages m
     JOIN mailboxes mb ON m.mailbox = mb.ROWID
     LEFT JOIN addresses a ON m.sender = a.ROWID
     LEFT JOIN subjects s ON m.subject = s.ROWID
     LEFT JOIN message_global_data mgd ON m.message_id = mgd.message_id
+    {sm_join}
     WHERE mb.url LIKE ?
     ORDER BY m.date_received DESC
     """
@@ -72,6 +87,9 @@ def scan_messages(conn: sqlite3.Connection) -> list[Message]:
             automated_conversation=row["automated_conversation"],
             model_category=row["model_category"],
             model_high_impact=row["model_high_impact"],
+            junk_level=row["junk_level"],
+            urgent=row["urgent"],
+            model_subcategory=row["model_subcategory"],
         )
         for row in cursor
     ]

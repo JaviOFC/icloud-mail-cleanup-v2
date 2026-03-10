@@ -149,6 +149,76 @@ class TestScanMessages:
         assert msg4.model_high_impact == 1
 
 
+class TestScanMessagesNewFields:
+    """Tests for junk_level, urgent, model_subcategory in scan_messages."""
+
+    def test_junk_level_fetched(self, db: sqlite3.Connection):
+        """junk_level is populated from server_messages table."""
+        insert_message(db, rowid=1, message_id=101, mailbox=1, sender=1,
+                        size=1000, date_received=1700000000, junk_level=2)
+        messages = scan_messages(db)
+        msg = next(m for m in messages if m.rowid == 1)
+        assert msg.junk_level == 2
+
+    def test_junk_level_default_zero(self, db: sqlite3.Connection):
+        """junk_level defaults to 0 when no server_messages row."""
+        insert_message(db, rowid=1, message_id=101, mailbox=1, sender=1,
+                        size=1000, date_received=1700000000)
+        messages = scan_messages(db)
+        msg = next(m for m in messages if m.rowid == 1)
+        assert msg.junk_level == 0
+
+    def test_urgent_fetched(self, db: sqlite3.Connection):
+        """urgent field is populated from message_global_data."""
+        insert_message(db, rowid=1, message_id=101, mailbox=1, sender=1,
+                        size=1000, date_received=1700000000, urgent=1)
+        messages = scan_messages(db)
+        msg = next(m for m in messages if m.rowid == 1)
+        assert msg.urgent == 1
+
+    def test_model_subcategory_fetched(self, db: sqlite3.Connection):
+        """model_subcategory is populated from message_global_data."""
+        insert_message(db, rowid=1, message_id=101, mailbox=1, sender=1,
+                        size=1000, date_received=1700000000, model_subcategory=5)
+        messages = scan_messages(db)
+        msg = next(m for m in messages if m.rowid == 1)
+        assert msg.model_subcategory == 5
+
+    def test_graceful_without_server_messages_table(self, tmp_path):
+        """scan_messages works when server_messages table doesn't exist."""
+        db_path = tmp_path / "no_sm.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        conn.executescript("""
+            CREATE TABLE mailboxes (ROWID INTEGER PRIMARY KEY, url TEXT);
+            CREATE TABLE addresses (ROWID INTEGER PRIMARY KEY, address TEXT, comment TEXT);
+            CREATE TABLE subjects (ROWID INTEGER PRIMARY KEY, subject TEXT);
+            CREATE TABLE messages (
+                ROWID INTEGER PRIMARY KEY, message_id INTEGER,
+                conversation_id INTEGER DEFAULT 0, mailbox INTEGER,
+                sender INTEGER, subject INTEGER,
+                flags INTEGER DEFAULT 0, read INTEGER DEFAULT 0,
+                flagged INTEGER DEFAULT 0, deleted INTEGER DEFAULT 0,
+                size INTEGER DEFAULT 0, date_received INTEGER DEFAULT 0,
+                list_id_hash INTEGER, unsubscribe_type INTEGER,
+                automated_conversation INTEGER DEFAULT 0
+            );
+            CREATE TABLE message_global_data (
+                ROWID INTEGER PRIMARY KEY, message_id INTEGER,
+                model_category INTEGER, model_high_impact INTEGER DEFAULT 0,
+                urgent INTEGER DEFAULT 0, model_subcategory INTEGER
+            );
+            INSERT INTO mailboxes VALUES (1, 'imap://XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/INBOX');
+            INSERT INTO addresses VALUES (1, 'test@example.com', NULL);
+            INSERT INTO subjects VALUES (1, 'Test');
+        """)
+        insert_message(conn, rowid=1, message_id=101, mailbox=1, sender=1, subject=1)
+        messages = scan_messages(conn)
+        assert len(messages) == 1
+        assert messages[0].junk_level == 0
+        conn.close()
+
+
 class TestGetSenderStats:
     def _seed(self, db: sqlite3.Connection) -> None:
         # alice sends 2 messages (same sender, same case)

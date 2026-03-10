@@ -40,6 +40,7 @@ _session_path: Path = Path.home() / ".icloud-cleanup" / "review_session.json"
 _db_path: Path | None = None
 _emlx_lookup: dict[int, Path] = {}
 _summaries: dict[int, str] = {}
+_executed_ids: set[int] = set()
 
 
 # --- Pydantic models ---
@@ -184,6 +185,7 @@ async def get_emails(
     sort_dir: str = Query("desc"),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
+    hide_executed: bool = Query(False),
 ):
     """Paginated, filterable email list.
 
@@ -196,6 +198,8 @@ async def get_emails(
     for c in _classifications:
         msg = _msg_index.get(c.message_id)
         if msg is None:
+            continue
+        if hide_executed and c.message_id in _executed_ids:
             continue
 
         if cluster and _cluster_key(c) != cluster:
@@ -286,6 +290,7 @@ async def get_emails(
         "avg_confidence": avg_conf,
         "top_domain": top_domain,
         "top_domain_count": top_domain_count,
+        "executed_count": len(_executed_ids),
     }
 
 
@@ -349,6 +354,11 @@ class DecideSenderRequest(BaseModel):
 
 class DecideRemainingRequest(BaseModel):
     pass
+
+
+class OverrideProtectionRequest(BaseModel):
+    message_ids: list[str]
+    override: bool = True
 
 
 @app.post("/api/decide-sender")
@@ -626,6 +636,102 @@ async def run_auto_triage():
     }
 
 
+@app.get("/api/protected-conflicts")
+async def get_protected_conflicts():
+    """Return approved-but-protected messages not yet overridden, grouped by sender."""
+    session = _get_session()
+    conflicts: dict[str, list[dict]] = defaultdict(list)
+
+    for c in _classifications:
+        if not c.protected:
+            continue
+        msg = _msg_index.get(c.message_id)
+        if msg is None:
+            continue
+
+        dec = _resolve_decision(c, session)
+        if dec != "approve":
+            continue
+
+        mid = str(c.message_id)
+        if mid in session.protection_overrides:
+            continue
+
+        conflicts[msg.sender_address].append({
+            "message_id": mid,
+            "sender": msg.sender_address,
+            "subject": msg.subject,
+            "date": msg.date_received,
+            "tier": c.tier.value,
+            "confidence": round(c.confidence, 4),
+            "signals": c.signals,
+            "overridden": False,
+        })
+
+    # Also include already-overridden for UI state tracking
+    overridden: dict[str, list[dict]] = defaultdict(list)
+    for c in _classifications:
+        if not c.protected:
+            continue
+        msg = _msg_index.get(c.message_id)
+        if msg is None:
+            continue
+        mid = str(c.message_id)
+        if mid not in session.protection_overrides:
+            continue
+        overridden[msg.sender_address].append({
+            "message_id": mid,
+            "sender": msg.sender_address,
+            "subject": msg.subject,
+            "date": msg.date_received,
+            "tier": c.tier.value,
+            "confidence": round(c.confidence, 4),
+            "signals": c.signals,
+            "overridden": True,
+        })
+
+    groups = []
+    all_senders = set(conflicts.keys()) | set(overridden.keys())
+    for sender in sorted(all_senders, key=lambda s: len(conflicts.get(s, [])), reverse=True):
+        items = conflicts.get(sender, []) + overridden.get(sender, [])
+        groups.append({
+            "sender": sender,
+            "pending_count": len(conflicts.get(sender, [])),
+            "overridden_count": len(overridden.get(sender, [])),
+            "emails": items,
+        })
+
+    total_pending = sum(len(v) for v in conflicts.values())
+    total_overridden = sum(len(v) for v in overridden.values())
+
+    return {
+        "groups": groups,
+        "total_pending": total_pending,
+        "total_overridden": total_overridden,
+    }
+
+
+@app.post("/api/override-protection")
+async def override_protection(req: OverrideProtectionRequest):
+    """Add or remove message IDs from the protection override set."""
+    session = _get_session()
+    changed = 0
+
+    for mid in req.message_ids:
+        mid_str = str(mid)
+        if req.override:
+            if mid_str not in session.protection_overrides:
+                session.protection_overrides.add(mid_str)
+                changed += 1
+        else:
+            if mid_str in session.protection_overrides:
+                session.protection_overrides.discard(mid_str)
+                changed += 1
+
+    _save()
+    return {"status": "ok", "changed": changed, "override": req.override}
+
+
 # --- Static files (must be last to avoid catching API routes) ---
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -650,6 +756,7 @@ def launch(
 
     global _checkpoint, _classifications, _messages, _msg_index
     global _sender_lookup, _session, _session_path, _db_path, _emlx_lookup, _summaries
+    global _executed_ids
 
     # Load checkpoint
     _checkpoint = load_checkpoint(checkpoint_path)
@@ -676,6 +783,23 @@ def launch(
     if existing:
         _session = existing
         print(f"  Resumed session {existing.session_id} ({len(existing.decisions)} cluster decisions)")
+
+    # Load executed message IDs from action log
+    action_log_path = Path.home() / ".icloud-cleanup" / "action_log.db"
+    if action_log_path.exists():
+        import sqlite3
+        try:
+            aconn = sqlite3.connect(action_log_path)
+            rows = aconn.execute(
+                "SELECT DISTINCT message_id FROM action_log "
+                "WHERE action = 'move_to_trash' AND success = 1 AND dry_run = 0"
+            ).fetchall()
+            _executed_ids = {r[0] for r in rows}
+            aconn.close()
+            if _executed_ids:
+                print(f"  {len(_executed_ids):,} previously executed deletions found")
+        except Exception as exc:
+            print(f"  Warning: Could not load action log: {exc}")
 
     # Build emlx lookup for body snippets
     try:

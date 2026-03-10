@@ -34,6 +34,7 @@ class ReviewSession:
     decisions: dict[str, dict] = field(default_factory=dict)
     individual_decisions: dict[str, dict] = field(default_factory=dict)
     propagation_applied: list[dict] = field(default_factory=list)
+    protection_overrides: set[str] = field(default_factory=set)
     completed: bool = False
 
 
@@ -56,6 +57,7 @@ def save_session(session: ReviewSession, path: Path) -> None:
         "decisions": session.decisions,
         "individual_decisions": session.individual_decisions,
         "propagation_applied": session.propagation_applied,
+        "protection_overrides": sorted(session.protection_overrides),
         "completed": session.completed,
     }
 
@@ -82,6 +84,7 @@ def load_session(path: Path) -> ReviewSession | None:
         decisions=data.get("decisions", {}),
         individual_decisions=data.get("individual_decisions", {}),
         propagation_applied=data.get("propagation_applied", []),
+        protection_overrides=set(data.get("protection_overrides", [])),
         completed=data.get("completed", False),
     )
 

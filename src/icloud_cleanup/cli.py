@@ -93,6 +93,12 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="SENDER",
         help="Dump per-signal breakdown for a specific sender address",
     )
+    classify_parser.add_argument(
+        "--mail-dir",
+        type=Path,
+        default=None,
+        help="Override Mail V10 directory for auth header parsing",
+    )
     classify_parser.set_defaults(func=cmd_classify)
 
     # analyze
@@ -261,6 +267,29 @@ def cmd_classify(args: argparse.Namespace) -> None:
                     msg_rowid_map[rowid].has_document_attachment = True
                     flagged_count += 1
             console.print(f"Flagged [bold]{flagged_count:,}[/bold] messages with document attachments\n")
+
+        # Step 2c: Extract auth headers from .emlx files
+        mail_dir = getattr(args, "mail_dir", None) or Path.home() / "Library/Mail/V10"
+        from icloud_cleanup.emlx_parser import build_emlx_lookup, parse_emlx_auth_headers
+        from icloud_cleanup.scanner import ICLOUD_UUID
+
+        emlx_lookup = build_emlx_lookup(mail_dir, ICLOUD_UUID)
+        if emlx_lookup:
+            msg_rowid_map2 = {m.rowid: m for m in messages}
+            auth_count = 0
+            for rowid, emlx_path in emlx_lookup.items():
+                msg = msg_rowid_map2.get(rowid)
+                if msg is None:
+                    continue
+                auth = parse_emlx_auth_headers(emlx_path)
+                if auth["spam_flag"] or auth["dkim"] or auth["dmarc"] or auth["spf"]:
+                    msg.spam_flag = auth["spam_flag"]
+                    msg.auth_dkim = auth["dkim"]
+                    msg.auth_dmarc = auth["dmarc"]
+                    msg.auth_spf = auth["spf"]
+                    auth_count += 1
+            if auth_count:
+                console.print(f"Extracted auth headers from [bold]{auth_count:,}[/bold] .emlx files\n")
 
         # Step 3: Check for incremental mode
         existing: dict[int, Classification] = {}
@@ -852,13 +881,27 @@ def cmd_execute(args: argparse.Namespace) -> None:
 
     try:
         if args.restore:
-            console.print("[bold]Restoring previously deleted messages...[/bold]\n")
-            result = restore_from_log(
-                action_log,
-                dry_run=not args.do_execute,
-                batch_size=args.batch_size,
-                batch_pause=args.batch_pause,
-            )
+            from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+
+            restorable = action_log.get_restorable()
+            console.print(f"[bold]Restoring {len(restorable)} previously deleted messages...[/bold]\n")
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[bold]{task.description}"),
+                MofNCompleteColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Restoring...", total=len(restorable))
+                result = restore_from_log(
+                    action_log,
+                    dry_run=not args.do_execute,
+                    batch_size=args.batch_size,
+                    batch_pause=args.batch_pause,
+                    progress_callback=lambda n: progress.advance(task, n),
+                )
+
             console.print(f"  Restored: [green]{result['success_count']}[/green]")
             console.print(f"  Errors: [red]{result['error_count']}[/red]")
             if not args.do_execute:
@@ -906,24 +949,50 @@ def cmd_execute(args: argparse.Namespace) -> None:
             if c.message_id in approved_ids
         }
 
+        from rich.progress import MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+
         dry_run = not args.do_execute
         mode_str = "[yellow]DRY-RUN[/yellow]" if dry_run else "[red]LIVE[/red]"
-        console.print(f"[bold]Executing deletions ({mode_str})...[/bold]")
-        console.print(f"  Approved: [bold]{len(approved_messages)}[/bold] messages\n")
 
-        result = execute_deletions(
-            approved_messages,
-            approved_classifications,
-            action_log,
-            dry_run=dry_run,
-            batch_size=args.batch_size,
-            batch_pause=args.batch_pause,
-        )
+        # Check how many were already executed in prior runs
+        already_done = action_log.get_executed_message_ids()
+        new_count = sum(1 for m in approved_messages if m.message_id not in already_done)
+        console.print(f"[bold]Executing deletions ({mode_str})...[/bold]")
+        if len(already_done & {m.message_id for m in approved_messages}) > 0:
+            console.print(f"  Approved: [bold]{len(approved_messages)}[/bold] messages "
+                         f"([bold]{new_count}[/bold] new, "
+                         f"[dim]{len(approved_messages) - new_count} already executed[/dim])\n")
+        else:
+            console.print(f"  Approved: [bold]{len(approved_messages)}[/bold] messages\n")
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold]{task.description}"),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Executing...", total=len(approved_messages))
+            overrides = {int(mid) for mid in session.protection_overrides} if session.protection_overrides else None
+            result = execute_deletions(
+                approved_messages,
+                approved_classifications,
+                action_log,
+                dry_run=dry_run,
+                batch_size=args.batch_size,
+                batch_pause=args.batch_pause,
+                progress_callback=lambda n: progress.advance(task, n),
+                protection_overrides=overrides,
+            )
 
         console.print(f"\n[bold]Execution results:[/bold]")
         console.print(f"  Moved to trash: [green]{result['success_count']}[/green]")
         console.print(f"  Errors: [red]{result['error_count']}[/red]")
         console.print(f"  Skipped (protected): [yellow]{result['skipped_protected']}[/yellow]")
+        if result.get('already_executed', 0) > 0:
+            console.print(f"  Already executed (prior run): [dim]{result['already_executed']}[/dim]")
+        if result.get('overridden_count', 0) > 0:
+            console.print(f"  Overridden (protected→deleted): [cyan]{result['overridden_count']}[/cyan]")
 
         if result["errors"]:
             console.print("\n[red]Errors:[/red]")

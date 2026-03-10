@@ -45,6 +45,13 @@ class Message:
     model_category: int | None
     model_high_impact: int
     has_document_attachment: bool = False
+    junk_level: int = 0
+    urgent: int = 0
+    model_subcategory: int | None = None
+    auth_dkim: str | None = None
+    auth_dmarc: str | None = None
+    auth_spf: str | None = None
+    spam_flag: bool = False
 
 
 @dataclass

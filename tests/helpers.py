@@ -25,6 +25,9 @@ def insert_message(
     automated_conversation: int = 0,
     model_category: int | None = None,
     model_high_impact: int = 0,
+    junk_level: int = 0,
+    urgent: int = 0,
+    model_subcategory: int | None = None,
 ) -> None:
     """Insert a message and its global data into the mock DB."""
     conn.execute(
@@ -39,10 +42,15 @@ def insert_message(
     )
     conn.execute(
         """INSERT INTO message_global_data
-        (message_id, model_category, model_high_impact)
-        VALUES (?, ?, ?)""",
-        (message_id, model_category, model_high_impact),
+        (message_id, model_category, model_high_impact, urgent, model_subcategory)
+        VALUES (?, ?, ?, ?, ?)""",
+        (message_id, model_category, model_high_impact, urgent, model_subcategory),
     )
+    if junk_level != 0:
+        conn.execute(
+            "INSERT INTO server_messages (message, junk_level) VALUES (?, ?)",
+            (rowid, junk_level),
+        )
 
 
 def insert_recipient(

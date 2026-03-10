@@ -145,7 +145,7 @@ class TestMailingListSignal:
         profile = _make_profile()
         signals = compute_signals(msg, profile)
         ml = next(s for s in signals if s.name == "mailing_list_signal")
-        assert ml.value == 0.5
+        assert ml.value == 0.4
 
 
 class TestNoreplySignal:
@@ -171,7 +171,7 @@ class TestNoreplySignal:
         profile = _make_profile(address="alice@example.com")
         signals = compute_signals(msg, profile)
         nr = next(s for s in signals if s.name == "noreply_signal")
-        assert nr.value == 0.5
+        assert nr.value == 0.4
 
 
 class TestAppleHighImpactSignal:
@@ -189,7 +189,7 @@ class TestAppleHighImpactSignal:
         profile = _make_profile()
         signals = compute_signals(msg, profile)
         hi = next(s for s in signals if s.name == "apple_high_impact_signal")
-        assert hi.value == 0.5
+        assert hi.value == 0.3
 
 
 class TestFeedbackSignal:

@@ -16,16 +16,20 @@ from icloud_cleanup.classifier import (
     ACTIVE_RECENCY_DAYS,
     APPLE_CATEGORY_WEIGHT,
     APPLE_HIGH_IMPACT_WEIGHT,
+    AUTH_WEIGHT,
     AUTOMATION_WEIGHT,
     CONTACT_WEIGHT,
+    DISPOSABLE_DOMAIN_WEIGHT,
     FLAGGED_WEIGHT,
     FREQUENCY_WEIGHT,
+    JUNK_LEVEL_WEIGHT,
     KEEP_THRESHOLD,
     MAILING_LIST_WEIGHT,
     NOREPLY_WEIGHT,
     RECENCY_WEIGHT,
     REPLY_RATE_WEIGHT,
     TRASH_THRESHOLD,
+    URGENT_WEIGHT,
     assign_tier,
     classify_messages,
     compute_confidence,
@@ -53,6 +57,13 @@ def _make_message(
     model_category: int | None = None,
     model_high_impact: int = 0,
     has_document_attachment: bool = False,
+    junk_level: int = 0,
+    urgent: int = 0,
+    model_subcategory: int | None = None,
+    auth_dkim: str | None = None,
+    auth_dmarc: str | None = None,
+    auth_spf: str | None = None,
+    spam_flag: bool = False,
 ) -> Message:
     """Create a Message with sensible defaults for testing."""
     return Message(
@@ -74,6 +85,13 @@ def _make_message(
         model_category=model_category,
         model_high_impact=model_high_impact,
         has_document_attachment=has_document_attachment,
+        junk_level=junk_level,
+        urgent=urgent,
+        model_subcategory=model_subcategory,
+        auth_dkim=auth_dkim,
+        auth_dmarc=auth_dmarc,
+        auth_spf=auth_spf,
+        spam_flag=spam_flag,
     )
 
 
@@ -110,8 +128,8 @@ def _make_profile(
 class TestComputeSignals:
     """Tests for compute_signals()."""
 
-    def test_returns_10_signal_results(self):
-        """compute_signals returns exactly 10 SignalResult objects (without feedback)."""
+    def test_returns_10_base_signal_results(self):
+        """compute_signals returns exactly 10 base SignalResult objects (new signals omitted when default)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
@@ -119,7 +137,7 @@ class TestComputeSignals:
         assert all(isinstance(s, SignalResult) for s in signals)
 
     def test_signal_names_match_spec(self):
-        """All 10 signal names match the spec (without feedback)."""
+        """Base 10 signal names match the spec (new optional signals omitted when default)."""
         msg = _make_message()
         profile = _make_profile()
         signals = compute_signals(msg, profile)
@@ -272,17 +290,25 @@ class TestComputeSignals:
         assert apple.value == 0.1
 
     def test_apple_category_none(self):
-        """Apple category None produces signal value 0.5."""
+        """Apple category None produces signal value 0.3 (leans trash)."""
         msg = _make_message(model_category=None)
         profile = _make_profile()
         signals = compute_signals(msg, profile)
         apple = next(s for s in signals if s.name == "apple_category_signal")
-        assert apple.value == 0.5
+        assert apple.value == 0.3
 
-    def test_automation_signal_human_no_unsubscribe(self):
-        """Human message without unsubscribe has automation_signal = 1.0."""
+    def test_automation_signal_human_unknown_sender(self):
+        """Unknown sender, not automated → 0.4 (not strong keep evidence)."""
         msg = _make_message(automated_conversation=0, unsubscribe_type=None)
-        profile = _make_profile()
+        profile = _make_profile()  # unknown sender by default
+        signals = compute_signals(msg, profile)
+        auto = next(s for s in signals if s.name == "automation_signal")
+        assert auto.value == 0.4
+
+    def test_automation_signal_human_known_sender(self):
+        """Known sender, not automated → 1.0 (strong keep evidence)."""
+        msg = _make_message(automated_conversation=0, unsubscribe_type=None)
+        profile = _make_profile(is_bidirectional=True)
         signals = compute_signals(msg, profile)
         auto = next(s for s in signals if s.name == "automation_signal")
         assert auto.value == 1.0
@@ -295,13 +321,21 @@ class TestComputeSignals:
         auto = next(s for s in signals if s.name == "automation_signal")
         assert auto.value == 0.0
 
-    def test_automation_signal_human_with_unsubscribe(self):
-        """Human message with unsubscribe has automation_signal = 0.5."""
+    def test_automation_signal_human_with_unsubscribe_known(self):
+        """Known sender with unsubscribe: 1.0 - 0.5 = 0.5."""
         msg = _make_message(automated_conversation=0, unsubscribe_type=1)
-        profile = _make_profile()
+        profile = _make_profile(times_sent_to=5)
         signals = compute_signals(msg, profile)
         auto = next(s for s in signals if s.name == "automation_signal")
         assert auto.value == 0.5
+
+    def test_automation_signal_human_with_unsubscribe_unknown(self):
+        """Unknown sender with unsubscribe: 0.4 - 0.5 = 0.0 (clamped)."""
+        msg = _make_message(automated_conversation=0, unsubscribe_type=1)
+        profile = _make_profile()  # unknown
+        signals = compute_signals(msg, profile)
+        auto = next(s for s in signals if s.name == "automation_signal")
+        assert auto.value == 0.0
 
     def test_flagged_signal_with_flagged(self):
         """Sender with flagged_count > 0 produces flagged_signal = 1.0."""
@@ -724,6 +758,126 @@ class TestDocumentAttachmentProtection:
             profile=profile, message=msg,
         )
         assert tier == Tier.REVIEW
+
+
+class TestJunkLevelSignal:
+    """Tests for junk_level_signal values (optional — only fires when junk_level > 0)."""
+
+    def test_junk_level_0_omitted(self):
+        """junk_level=0 produces no signal (omitted, no info)."""
+        msg = _make_message(junk_level=0)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        names = {s.name for s in signals}
+        assert "junk_level_signal" not in names
+
+    def test_junk_level_1_uncertain(self):
+        msg = _make_message(junk_level=1)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        jl = next(s for s in signals if s.name == "junk_level_signal")
+        assert jl.value == 0.2
+
+    def test_junk_level_2_spam(self):
+        msg = _make_message(junk_level=2)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        jl = next(s for s in signals if s.name == "junk_level_signal")
+        assert jl.value == 0.05
+
+
+class TestUrgentSignal:
+    """Tests for urgent_signal values (optional — only fires when urgent=1)."""
+
+    def test_urgent_1_keep(self):
+        msg = _make_message(urgent=1)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        urg = next(s for s in signals if s.name == "urgent_signal")
+        assert urg.value == 0.9
+
+    def test_urgent_0_omitted(self):
+        """urgent=0 produces no signal (omitted, no info)."""
+        msg = _make_message(urgent=0)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        names = {s.name for s in signals}
+        assert "urgent_signal" not in names
+
+
+class TestDisposableDomainSignal:
+    """Tests for disposable_domain_signal values (optional — only fires for disposable domains)."""
+
+    def test_disposable_domain(self):
+        """Known disposable domain produces signal value 0.0."""
+        msg = _make_message(sender_address="user@mailinator.com")
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        disp = next(s for s in signals if s.name == "disposable_domain_signal")
+        assert disp.value == 0.0
+
+    def test_normal_domain_omitted(self):
+        """Normal domain produces no signal (omitted)."""
+        msg = _make_message(sender_address="user@gmail.com")
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        names = {s.name for s in signals}
+        assert "disposable_domain_signal" not in names
+
+
+class TestAuthSignal:
+    """Tests for auth_signal (optional signal from emlx headers)."""
+
+    def test_auth_omitted_when_no_data(self):
+        """Auth signal is omitted when message has no auth data."""
+        msg = _make_message()
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        names = {s.name for s in signals}
+        assert "auth_signal" not in names
+
+    def test_spam_flag_true(self):
+        msg = _make_message(spam_flag=True)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        auth = next(s for s in signals if s.name == "auth_signal")
+        assert auth.value == 0.05
+
+    def test_all_pass(self):
+        msg = _make_message(auth_dkim="pass", auth_dmarc="pass", auth_spf="pass")
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        auth = next(s for s in signals if s.name == "auth_signal")
+        assert auth.value == 0.7
+
+    def test_any_fail(self):
+        msg = _make_message(auth_dkim="pass", auth_dmarc="fail", auth_spf="pass")
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        auth = next(s for s in signals if s.name == "auth_signal")
+        assert auth.value == 0.1
+
+    def test_permerror(self):
+        msg = _make_message(auth_dkim="permerror", auth_dmarc=None, auth_spf=None)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        auth = next(s for s in signals if s.name == "auth_signal")
+        assert auth.value == 0.1
+
+    def test_mixed_none(self):
+        msg = _make_message(auth_dkim="pass", auth_dmarc=None, auth_spf=None)
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        auth = next(s for s in signals if s.name == "auth_signal")
+        # Only dkim=pass, others None → all non-None pass → 0.7
+        assert auth.value == 0.7
+
+    def test_11_signals_with_auth(self):
+        """With auth data only (no other optional signals), compute_signals returns 11."""
+        msg = _make_message(auth_dkim="pass", auth_spf="pass", auth_dmarc="pass")
+        profile = _make_profile()
+        signals = compute_signals(msg, profile)
+        assert len(signals) == 11
 
 
 class TestFusedClassification:

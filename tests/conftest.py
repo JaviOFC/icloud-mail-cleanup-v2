@@ -66,7 +66,15 @@ def db() -> sqlite3.Connection:
             ROWID INTEGER PRIMARY KEY,
             message_id INTEGER,
             model_category INTEGER,
-            model_high_impact INTEGER DEFAULT 0
+            model_high_impact INTEGER DEFAULT 0,
+            urgent INTEGER DEFAULT 0,
+            model_subcategory INTEGER
+        );
+
+        CREATE TABLE server_messages (
+            ROWID INTEGER PRIMARY KEY,
+            message INTEGER REFERENCES messages(ROWID),
+            junk_level INTEGER DEFAULT 0
         );
 
         CREATE TABLE attachments (

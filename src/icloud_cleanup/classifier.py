@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import time
+from pathlib import Path
 
 from icloud_cleanup.contacts import check_protection_override, is_protected
 from icloud_cleanup.models import (
@@ -27,6 +28,25 @@ FLAGGED_WEIGHT = 0.04
 MAILING_LIST_WEIGHT = 0.05
 NOREPLY_WEIGHT = 0.03
 FEEDBACK_WEIGHT = 0.10
+# New signals — optional, only fire when informative (auto-normalize handles weight)
+JUNK_LEVEL_WEIGHT = 0.07
+URGENT_WEIGHT = 0.05
+DISPOSABLE_DOMAIN_WEIGHT = 0.05
+AUTH_WEIGHT = 0.06
+
+# Disposable email domains — loaded once at import
+def _load_disposable_domains() -> frozenset[str]:
+    path = Path(__file__).parent / "data" / "disposable_domains.txt"
+    try:
+        return frozenset(
+            line.strip().lower()
+            for line in path.read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        )
+    except FileNotFoundError:
+        return frozenset()
+
+_DISPOSABLE_DOMAINS: frozenset[str] = _load_disposable_domains()
 
 _NOREPLY_PATTERN = re.compile(
     r"(noreply|no-reply|donotreply|do-not-reply|mailer-daemon)", re.IGNORECASE,
@@ -48,7 +68,7 @@ _APPLE_CATEGORY_MAP: dict[int | None, float] = {
     1: 0.7,   # Transactions
     2: 0.3,   # Updates
     3: 0.1,   # Promotions
-    None: 0.5,
+    None: 0.3,  # Unknown category — leans trash (no positive evidence)
 }
 
 
@@ -115,16 +135,24 @@ def compute_signals(
         hi_val = 0.9
         hi_expl = "model_high_impact=1 (Apple thinks important)"
     else:
-        hi_val = 0.5
-        hi_expl = f"model_high_impact={message.model_high_impact} (neutral)"
+        hi_val = 0.3
+        hi_expl = f"model_high_impact={message.model_high_impact} (not important, leans trash)"
 
     # 7. Automation signal: penalize automated + unsubscribe
+    is_known_sender = (
+        profile.is_bidirectional
+        or profile.in_system_contacts
+        or profile.times_sent_to > 0
+    )
     if message.automated_conversation > 0:
         auto_val = 0.0
         auto_expl = "automated conversation"
-    else:
+    elif is_known_sender:
         auto_val = 1.0
-        auto_expl = "human-sent"
+        auto_expl = "human-sent (known sender)"
+    else:
+        auto_val = 0.4
+        auto_expl = "not automated but unknown sender"
     if message.unsubscribe_type is not None:
         auto_val = max(0.0, auto_val - 0.5)
         auto_expl += f", has unsubscribe (type={message.unsubscribe_type})"
@@ -138,8 +166,8 @@ def compute_signals(
         ml_val = 0.1
         ml_expl = "list_id_hash present (mailing list)"
     else:
-        ml_val = 0.5
-        ml_expl = "no list_id_hash (neutral)"
+        ml_val = 0.4
+        ml_expl = "no list_id_hash (mildly positive)"
 
     # 10. Noreply signal
     addr_lower = message.sender_address.lower()
@@ -147,8 +175,8 @@ def compute_signals(
         nr_val = 0.1
         nr_expl = f"noreply pattern in {addr_lower}"
     else:
-        nr_val = 0.5
-        nr_expl = "no noreply pattern (neutral)"
+        nr_val = 0.4
+        nr_expl = "no noreply pattern (mildly positive)"
 
     signals = [
         SignalResult("contact_score", contact_val, CONTACT_WEIGHT, contact_expl),
@@ -163,7 +191,42 @@ def compute_signals(
         SignalResult("noreply_signal", nr_val, NOREPLY_WEIGHT, nr_expl),
     ]
 
-    # 11. Feedback signal (optional — omitted when no feedback data available)
+    # 11. Junk level signal (optional — omitted when junk_level=0, no info)
+    if message.junk_level > 0:
+        if message.junk_level == 2:
+            jl_val = 0.05
+            jl_expl = "junk_level=2 (iCloud flagged spam)"
+        else:
+            jl_val = 0.2
+            jl_expl = "junk_level=1 (uncertain)"
+        signals.append(SignalResult("junk_level_signal", jl_val, JUNK_LEVEL_WEIGHT, jl_expl))
+
+    # 12. Urgent signal (optional — omitted when urgent=0, no info)
+    if message.urgent == 1:
+        signals.append(SignalResult("urgent_signal", 0.9, URGENT_WEIGHT, "urgent=1 (Apple says urgent — keep)"))
+
+    # 13. Disposable domain signal (optional — omitted when domain is not disposable)
+    domain = addr_lower.rsplit("@", 1)[-1] if "@" in addr_lower else ""
+    if domain in _DISPOSABLE_DOMAINS:
+        signals.append(SignalResult("disposable_domain_signal", 0.0, DISPOSABLE_DOMAIN_WEIGHT, f"disposable domain: {domain}"))
+
+    # 14. Auth signal (optional — omitted when no emlx auth data available)
+    if message.spam_flag or message.auth_dkim is not None or message.auth_dmarc is not None or message.auth_spf is not None:
+        if message.spam_flag:
+            auth_val = 0.05
+            auth_expl = "X-Spam-Flag: yes"
+        elif all(v == "pass" for v in (message.auth_dkim, message.auth_dmarc, message.auth_spf) if v is not None) and any(v is not None for v in (message.auth_dkim, message.auth_dmarc, message.auth_spf)):
+            auth_val = 0.7
+            auth_expl = "all auth checks pass"
+        elif any(v in ("fail", "permerror") for v in (message.auth_dkim, message.auth_dmarc, message.auth_spf) if v is not None):
+            auth_val = 0.1
+            auth_expl = f"auth fail/permerror: dkim={message.auth_dkim} dmarc={message.auth_dmarc} spf={message.auth_spf}"
+        else:
+            auth_val = 0.4
+            auth_expl = f"mixed/partial auth: dkim={message.auth_dkim} dmarc={message.auth_dmarc} spf={message.auth_spf}"
+        signals.append(SignalResult("auth_signal", auth_val, AUTH_WEIGHT, auth_expl))
+
+    # 15. Feedback signal (optional — omitted when no feedback data available)
     if feedback is not None:
         fb = feedback.get(addr_lower)
         if fb is not None:

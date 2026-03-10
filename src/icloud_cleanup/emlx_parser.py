@@ -67,6 +67,48 @@ def strip_html(html_text: str) -> str:
     return stripper.get_text()
 
 
+_AUTH_DKIM_RE = re.compile(r"dkim=(\w+)", re.IGNORECASE)
+_AUTH_SPF_RE = re.compile(r"spf=(\w+)", re.IGNORECASE)
+_AUTH_DMARC_RE = re.compile(r"dmarc=(\w+)", re.IGNORECASE)
+
+
+def parse_emlx_auth_headers(path: Path) -> dict:
+    """Extract authentication headers from an .emlx file.
+
+    Reads only the header block (first ~8KB) for speed.
+    Returns {"spam_flag": bool, "dkim": str|None, "dmarc": str|None, "spf": str|None}.
+    """
+    result: dict = {"spam_flag": False, "dkim": None, "dmarc": None, "spf": None}
+    try:
+        with open(path, "rb") as f:
+            bytecount = int(f.readline().strip())
+            read_size = min(bytecount, 8192)
+            msg_bytes = f.read(read_size)
+        msg = email.message_from_bytes(msg_bytes)
+    except Exception:
+        return result
+
+    spam_flag = msg.get("X-Spam-Flag", "")
+    if spam_flag.strip().lower() == "yes":
+        result["spam_flag"] = True
+
+    # iCloud splits auth results across multiple headers — read all of them
+    all_auth = msg.get_all("Authentication-Results") or []
+    combined_auth = " ".join(str(h) for h in all_auth)
+    if combined_auth:
+        m = _AUTH_DKIM_RE.search(combined_auth)
+        if m:
+            result["dkim"] = m.group(1).lower()
+        m = _AUTH_SPF_RE.search(combined_auth)
+        if m:
+            result["spf"] = m.group(1).lower()
+        m = _AUTH_DMARC_RE.search(combined_auth)
+        if m:
+            result["dmarc"] = m.group(1).lower()
+
+    return result
+
+
 def build_emlx_lookup(mail_dir: Path, account_uuid: str) -> dict[int, Path]:
     """Walk directory tree under account, return {ROWID: Path} for .emlx files.
 

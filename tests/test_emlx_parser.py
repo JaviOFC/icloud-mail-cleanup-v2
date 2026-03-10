@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from icloud_cleanup.emlx_parser import build_emlx_lookup, parse_emlx_body, strip_html
+from icloud_cleanup.emlx_parser import build_emlx_lookup, parse_emlx_auth_headers, parse_emlx_body, strip_html
 
 
 def _make_emlx(path: Path, body: bytes, content_type: str = "text/plain", charset: str = "utf-8") -> None:
@@ -272,3 +272,103 @@ class TestErrorHandling:
         result = parse_emlx_body(emlx)
         # Truncated binary: either None or empty-ish — never crashes
         assert result is None or (isinstance(result, str) and len(result) < 20)
+
+
+def _make_auth_emlx(path: Path, headers: dict[str, str]) -> None:
+    """Create a minimal .emlx with custom headers for auth testing."""
+    header_lines = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
+    raw_msg = (
+        f"From: test@example.com\r\n"
+        f"Subject: Test\r\n"
+        f"{header_lines}"
+        f"\r\n"
+        f"Body text\r\n"
+    ).encode()
+    with open(path, "wb") as f:
+        f.write(f"{len(raw_msg)}\n".encode())
+        f.write(raw_msg)
+
+
+class TestParseEmlxAuthHeaders:
+    """Tests for parse_emlx_auth_headers — spam flag and DKIM/SPF/DMARC extraction."""
+
+    def test_spam_flag_present(self, tmp_path: Path):
+        emlx = tmp_path / "1.emlx"
+        _make_auth_emlx(emlx, {"X-Spam-Flag": "YES"})
+        result = parse_emlx_auth_headers(emlx)
+        assert result["spam_flag"] is True
+
+    def test_spam_flag_absent(self, tmp_path: Path):
+        emlx = tmp_path / "2.emlx"
+        _make_auth_emlx(emlx, {})
+        result = parse_emlx_auth_headers(emlx)
+        assert result["spam_flag"] is False
+
+    def test_dkim_pass(self, tmp_path: Path):
+        emlx = tmp_path / "3.emlx"
+        _make_auth_emlx(emlx, {
+            "Authentication-Results": "mx.icloud.com; dkim=pass; spf=pass; dmarc=pass"
+        })
+        result = parse_emlx_auth_headers(emlx)
+        assert result["dkim"] == "pass"
+        assert result["spf"] == "pass"
+        assert result["dmarc"] == "pass"
+
+    def test_dkim_fail(self, tmp_path: Path):
+        emlx = tmp_path / "4.emlx"
+        _make_auth_emlx(emlx, {
+            "Authentication-Results": "mx.icloud.com; dkim=fail; spf=pass; dmarc=fail"
+        })
+        result = parse_emlx_auth_headers(emlx)
+        assert result["dkim"] == "fail"
+        assert result["dmarc"] == "fail"
+        assert result["spf"] == "pass"
+
+    def test_dkim_permerror(self, tmp_path: Path):
+        emlx = tmp_path / "5.emlx"
+        _make_auth_emlx(emlx, {
+            "Authentication-Results": "mx.icloud.com; dkim=permerror"
+        })
+        result = parse_emlx_auth_headers(emlx)
+        assert result["dkim"] == "permerror"
+        assert result["spf"] is None
+        assert result["dmarc"] is None
+
+    def test_missing_headers_return_none(self, tmp_path: Path):
+        emlx = tmp_path / "6.emlx"
+        _make_auth_emlx(emlx, {})
+        result = parse_emlx_auth_headers(emlx)
+        assert result["dkim"] is None
+        assert result["spf"] is None
+        assert result["dmarc"] is None
+        assert result["spam_flag"] is False
+
+    def test_malformed_emlx_returns_defaults(self, tmp_path: Path):
+        emlx = tmp_path / "bad.emlx"
+        emlx.write_bytes(b"")
+        result = parse_emlx_auth_headers(emlx)
+        assert result == {"spam_flag": False, "dkim": None, "dmarc": None, "spf": None}
+
+    def test_missing_file_returns_defaults(self, tmp_path: Path):
+        result = parse_emlx_auth_headers(tmp_path / "nonexistent.emlx")
+        assert result == {"spam_flag": False, "dkim": None, "dmarc": None, "spf": None}
+
+    def test_multiple_auth_results_headers(self, tmp_path: Path):
+        """iCloud splits auth across multiple Authentication-Results headers."""
+        emlx = tmp_path / "multi.emlx"
+        raw_msg = (
+            b"From: spam@example.com\r\n"
+            b"Subject: Test\r\n"
+            b"Authentication-Results: dmarc.icloud.com; dmarc=pass\r\n"
+            b"Authentication-Results: dkim-verifier.icloud.com; dkim=pass\r\n"
+            b"Authentication-Results: spf.icloud.com; spf=fail\r\n"
+            b"\r\n"
+            b"Body\r\n"
+        )
+        with open(emlx, "wb") as f:
+            f.write(f"{len(raw_msg)}\n".encode())
+            f.write(raw_msg)
+        result = parse_emlx_auth_headers(emlx)
+        assert result["dmarc"] == "pass"
+        assert result["dkim"] == "pass"
+        assert result["spf"] == "fail"

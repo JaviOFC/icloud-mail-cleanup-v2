@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -67,6 +68,7 @@ def generate_batch_applescript(
     batch: list[Message],
     classifications: dict[int, Classification],
     trash_mailbox: str = TRASH_MAILBOX,
+    protection_overrides: set[int] | None = None,
 ) -> tuple[str, list[int]]:
     """Build a single AppleScript that moves all messages in batch to trash.
 
@@ -74,12 +76,15 @@ def generate_batch_applescript(
     try/on error block for individual error tracking. Returns (script, rowids)
     where rowids is the ordered list of ROWIDs included in the script.
     """
+    overrides = protection_overrides or set()
     # Group by AppleScript mailbox reference
     by_mailbox: dict[str, list[int]] = defaultdict(list)
     rowid_order: list[int] = []
     for msg in batch:
         cls = classifications.get(msg.message_id)
-        if cls is None or cls.protected:
+        if cls is None:
+            continue
+        if cls.protected and msg.message_id not in overrides:
             continue
         ref = url_to_applescript_mailbox(msg.mailbox_url)
         by_mailbox[ref].append(msg.rowid)
@@ -330,6 +335,14 @@ class ActionLog:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_executed_message_ids(self) -> set[int]:
+        """Return message IDs that were already successfully moved to trash (live, not dry-run)."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT message_id FROM action_log "
+            "WHERE action = 'move_to_trash' AND success = 1 AND dry_run = 0",
+        ).fetchall()
+        return {row[0] for row in rows}
+
     def close(self) -> None:
         self._conn.close()
 
@@ -341,17 +354,27 @@ def execute_deletions(
     dry_run: bool = True,
     batch_size: int = 100,
     batch_pause: float = 2.0,
+    progress_callback: Callable[[int], None] | None = None,
+    protection_overrides: set[int] | None = None,
 ) -> dict:
     """Execute approved deletions via batched AppleScript with audit logging.
 
     Each batch of messages is handled by a single osascript process instead of
-    one per message. Returns summary dict with success_count, error_count,
-    skipped_protected, errors.
+    one per message. Skips messages already successfully executed in prior runs.
+    Returns summary dict with success_count, error_count, skipped_protected,
+    overridden_count, already_executed, errors.
     """
+    # Filter out messages already successfully executed in prior runs
+    already_executed_ids = action_log.get_executed_message_ids()
+    if already_executed_ids:
+        messages = [m for m in messages if m.message_id not in already_executed_ids]
+
     success_count = 0
     error_count = 0
     skipped_protected = 0
+    overridden_count = 0
     errors: list[str] = []
+    overrides = protection_overrides or set()
 
     # Build rowid -> msg lookup for logging after batch execution
     rowid_to_msg: dict[int, Message] = {m.rowid: m for m in messages}
@@ -364,7 +387,7 @@ def execute_deletions(
             cls = classifications.get(msg.message_id)
             if cls is None:
                 continue
-            if cls.protected:
+            if cls.protected and msg.message_id not in overrides:
                 skipped_protected += 1
                 action_log.log_action_no_commit(
                     message_id=msg.message_id,
@@ -379,12 +402,33 @@ def execute_deletions(
                     success=False,
                     error_message="Protected message rejected from execution",
                 )
-                log.warning(
+                log.debug(
                     "Protected message rejected: rowid=%d subject=%s",
                     msg.rowid, msg.subject,
                 )
+            elif cls.protected and msg.message_id in overrides:
+                overridden_count += 1
+                action_log.log_action_no_commit(
+                    message_id=msg.message_id,
+                    rowid_in_db=msg.rowid,
+                    subject=msg.subject,
+                    sender_address=msg.sender_address,
+                    tier=cls.tier.value,
+                    confidence=cls.confidence,
+                    action="override_protected",
+                    source_mailbox=msg.mailbox_url,
+                    dry_run=dry_run,
+                    success=True,
+                    error_message=None,
+                )
+                log.debug(
+                    "Protected message overridden: rowid=%d subject=%s",
+                    msg.rowid, msg.subject,
+                )
 
-        script, rowids = generate_batch_applescript(batch, classifications)
+        script, rowids = generate_batch_applescript(
+            batch, classifications, protection_overrides=overrides,
+        )
 
         if not rowids:
             action_log.commit()
@@ -466,6 +510,9 @@ def execute_deletions(
 
         action_log.commit()
 
+        if progress_callback is not None:
+            progress_callback(len(batch))
+
         # Pause between batches (not after last batch)
         if batch_start + batch_size < len(messages):
             time.sleep(batch_pause)
@@ -474,6 +521,8 @@ def execute_deletions(
         "success_count": success_count,
         "error_count": error_count,
         "skipped_protected": skipped_protected,
+        "overridden_count": overridden_count,
+        "already_executed": len(already_executed_ids),
         "errors": errors,
     }
 
@@ -483,6 +532,7 @@ def restore_from_log(
     dry_run: bool = True,
     batch_size: int = 100,
     batch_pause: float = 2.0,
+    progress_callback: Callable[[int], None] | None = None,
 ) -> dict:
     """Restore previously trashed messages from the action log using batched AppleScript."""
     restorable = action_log.get_restorable()
@@ -571,6 +621,9 @@ def restore_from_log(
                         errors.append(f"ROWID {rid}: {err_msg}")
 
         action_log.commit()
+
+        if progress_callback is not None:
+            progress_callback(len(batch))
 
         if batch_start + batch_size < len(restorable):
             time.sleep(batch_pause)

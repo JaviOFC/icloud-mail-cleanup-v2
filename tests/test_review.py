@@ -55,6 +55,7 @@ class TestReviewSession:
         assert session.decisions == {}
         assert session.individual_decisions == {}
         assert session.propagation_applied == []
+        assert session.protection_overrides == set()
         assert session.completed is False
         assert session.auto_triage_summary is None
 
@@ -362,3 +363,54 @@ class TestInspectModeDisplay:
         output = "\n".join(lines)
         assert "Preview" not in output
         assert "Signals" not in output
+
+
+class TestProtectionOverrides:
+    """Tests for protection_overrides serialization."""
+
+    def test_roundtrip_with_overrides(self, tmp_path: Path) -> None:
+        session_path = tmp_path / "session.json"
+        original = ReviewSession(
+            session_id="override_001",
+            started_at=1700000000,
+            last_updated=1700000000,
+            protection_overrides={"12345", "67890"},
+        )
+        save_session(original, session_path)
+        loaded = load_session(session_path)
+
+        assert loaded is not None
+        assert loaded.protection_overrides == {"12345", "67890"}
+
+    def test_old_session_without_overrides(self, tmp_path: Path) -> None:
+        """Old session files missing the key should default to empty set."""
+        session_path = tmp_path / "session.json"
+        data = {
+            "session_id": "old_001",
+            "started_at": 1700000000,
+            "last_updated": 1700000000,
+            "decisions": {},
+            "individual_decisions": {},
+            "propagation_applied": [],
+            "completed": False,
+        }
+        with open(session_path, "w") as f:
+            json.dump(data, f)
+
+        loaded = load_session(session_path)
+        assert loaded is not None
+        assert loaded.protection_overrides == set()
+
+    def test_serialized_as_sorted_list(self, tmp_path: Path) -> None:
+        session_path = tmp_path / "session.json"
+        session = ReviewSession(
+            session_id="sorted_001",
+            started_at=1700000000,
+            last_updated=1700000000,
+            protection_overrides={"99", "11", "55"},
+        )
+        save_session(session, session_path)
+
+        with open(session_path) as f:
+            raw = json.load(f)
+        assert raw["protection_overrides"] == ["11", "55", "99"]

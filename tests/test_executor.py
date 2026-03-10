@@ -547,6 +547,30 @@ class TestExecuteDeletions:
         assert len(successes) == 1
         assert len(failures) == 2
 
+    def test_progress_callback_called_per_batch(self, tmp_path: Path):
+        """progress_callback should be called once per batch with batch size."""
+        msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(5)]
+        clss = {m.message_id: _make_classification(message_id=m.message_id) for m in msgs}
+        log = ActionLog(tmp_path / "action_log.db")
+        callback = MagicMock()
+
+        with patch("icloud_cleanup.executor.subprocess"), \
+             patch("icloud_cleanup.executor.time"):
+            execute_deletions(
+                messages=msgs,
+                classifications=clss,
+                action_log=log,
+                dry_run=True,
+                batch_size=2,
+                progress_callback=callback,
+            )
+
+        # 5 messages, batch_size=2 -> 3 batches: [2, 2, 1]
+        assert callback.call_count == 3
+        assert callback.call_args_list[0].args == (2,)
+        assert callback.call_args_list[1].args == (2,)
+        assert callback.call_args_list[2].args == (1,)
+
     def test_whole_batch_failure(self, tmp_path: Path):
         """If osascript returns non-zero with no stdout, all messages fail."""
         msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(2)]
@@ -613,6 +637,26 @@ class TestRestoreFromLog:
 
         assert result["success_count"] == 1
 
+    def test_restore_progress_callback(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        for i in range(3):
+            log.log_action(
+                message_id=5000 + i, rowid_in_db=100 + i, subject="Test",
+                sender_address="s@e.com", tier="trash", confidence=0.0,
+                action="move_to_trash", source_mailbox="INBOX",
+                dry_run=False, success=True, error_message=None,
+            )
+        callback = MagicMock()
+
+        with patch("icloud_cleanup.executor.subprocess"), \
+             patch("icloud_cleanup.executor.time"):
+            restore_from_log(log, dry_run=True, batch_size=2, progress_callback=callback)
+
+        # 3 restorable, batch_size=2 -> 2 batches: [2, 1]
+        assert callback.call_count == 2
+        assert callback.call_args_list[0].args == (2,)
+        assert callback.call_args_list[1].args == (1,)
+
     def test_restore_batch_handles_errors(self, tmp_path: Path):
         log = ActionLog(tmp_path / "action_log.db")
         log.log_action(
@@ -639,3 +683,218 @@ class TestRestoreFromLog:
 
         assert result["success_count"] == 1
         assert result["error_count"] == 1
+
+
+class TestProtectionOverrides:
+    """Tests for protection override behavior in execute_deletions."""
+
+    def test_protected_with_override_gets_deleted(self, tmp_path: Path):
+        """Protected message in override set should be included in batch and deleted."""
+        msg = _make_message()
+        cls = _make_classification(protected=True)
+        log = ActionLog(tmp_path / "action_log.db")
+
+        result = execute_deletions(
+            messages=[msg],
+            classifications={msg.message_id: cls},
+            action_log=log,
+            dry_run=True,
+            batch_size=100,
+            protection_overrides={msg.message_id},
+        )
+
+        assert result["skipped_protected"] == 0
+        assert result["overridden_count"] == 1
+        assert result["success_count"] == 1
+
+    def test_protected_without_override_still_skipped(self, tmp_path: Path):
+        """Protected message NOT in override set should still be skipped."""
+        msg = _make_message()
+        cls = _make_classification(protected=True)
+        log = ActionLog(tmp_path / "action_log.db")
+
+        with patch("icloud_cleanup.executor.subprocess") as mock_sub:
+            result = execute_deletions(
+                messages=[msg],
+                classifications={msg.message_id: cls},
+                action_log=log,
+                dry_run=False,
+                batch_size=100,
+                protection_overrides=None,
+            )
+            mock_sub.run.assert_not_called()
+
+        assert result["skipped_protected"] == 1
+        assert result["overridden_count"] == 0
+        assert result["success_count"] == 0
+
+    def test_override_protected_action_logged(self, tmp_path: Path):
+        """Overridden messages should be logged with action='override_protected'."""
+        msg = _make_message()
+        cls = _make_classification(protected=True)
+        log = ActionLog(tmp_path / "action_log.db")
+
+        execute_deletions(
+            messages=[msg],
+            classifications={msg.message_id: cls},
+            action_log=log,
+            dry_run=True,
+            batch_size=100,
+            protection_overrides={msg.message_id},
+        )
+
+        actions = log.get_actions(action="override_protected")
+        assert len(actions) == 1
+        assert actions[0]["message_id"] == msg.message_id
+
+    def test_mixed_protected_and_normal(self, tmp_path: Path):
+        """Batch with protected (overridden), protected (not overridden), and normal messages."""
+        msg_normal = _make_message(rowid=1, message_id=5001)
+        msg_prot_override = _make_message(rowid=2, message_id=5002)
+        msg_prot_skip = _make_message(rowid=3, message_id=5003)
+
+        clss = {
+            5001: _make_classification(message_id=5001, protected=False),
+            5002: _make_classification(message_id=5002, protected=True),
+            5003: _make_classification(message_id=5003, protected=True),
+        }
+
+        log = ActionLog(tmp_path / "action_log.db")
+        result = execute_deletions(
+            messages=[msg_normal, msg_prot_override, msg_prot_skip],
+            classifications=clss,
+            action_log=log,
+            dry_run=True,
+            batch_size=100,
+            protection_overrides={5002},
+        )
+
+        assert result["success_count"] == 2  # normal + overridden
+        assert result["skipped_protected"] == 1  # 5003
+        assert result["overridden_count"] == 1  # 5002
+
+
+class TestGetExecutedMessageIds:
+    """Tests for ActionLog.get_executed_message_ids()."""
+
+    def test_empty_log(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        assert log.get_executed_message_ids() == set()
+
+    def test_returns_successful_live_moves(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        log.log_action(
+            message_id=100, rowid_in_db=1, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=False, success=True, error_message=None,
+        )
+        assert log.get_executed_message_ids() == {100}
+
+    def test_excludes_dry_runs(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        log.log_action(
+            message_id=100, rowid_in_db=1, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=True, success=True, error_message=None,
+        )
+        assert log.get_executed_message_ids() == set()
+
+    def test_excludes_failed_moves(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        log.log_action(
+            message_id=100, rowid_in_db=1, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=False, success=False, error_message="err",
+        )
+        assert log.get_executed_message_ids() == set()
+
+    def test_excludes_non_trash_actions(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        log.log_action(
+            message_id=100, rowid_in_db=1, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="restore",
+            source_mailbox="INBOX", dry_run=False, success=True, error_message=None,
+        )
+        assert log.get_executed_message_ids() == set()
+
+
+class TestAlreadyExecutedFiltering:
+    """Tests for execute_deletions skipping already-executed messages."""
+
+    def test_already_executed_skipped(self, tmp_path: Path):
+        """Messages already successfully moved should not be re-processed."""
+        msg = _make_message(rowid=100, message_id=5000)
+        cls = _make_classification(message_id=5000)
+        log = ActionLog(tmp_path / "action_log.db")
+
+        # Pre-populate: this message was already executed
+        log.log_action(
+            message_id=5000, rowid_in_db=100, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=False, success=True, error_message=None,
+        )
+
+        with patch("icloud_cleanup.executor.subprocess") as mock_sub:
+            result = execute_deletions(
+                messages=[msg],
+                classifications={msg.message_id: cls},
+                action_log=log,
+                dry_run=False,
+                batch_size=100,
+            )
+            mock_sub.run.assert_not_called()
+
+        assert result["success_count"] == 0
+        assert result["already_executed"] == 1
+
+    def test_mix_new_and_already_executed(self, tmp_path: Path):
+        """Only new messages should be processed; already-executed are skipped."""
+        msg_old = _make_message(rowid=100, message_id=5000)
+        msg_new = _make_message(rowid=200, message_id=5001)
+        clss = {
+            5000: _make_classification(message_id=5000),
+            5001: _make_classification(message_id=5001),
+        }
+        log = ActionLog(tmp_path / "action_log.db")
+
+        # Only msg_old was previously executed
+        log.log_action(
+            message_id=5000, rowid_in_db=100, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=False, success=True, error_message=None,
+        )
+
+        result = execute_deletions(
+            messages=[msg_old, msg_new],
+            classifications=clss,
+            action_log=log,
+            dry_run=True,
+            batch_size=100,
+        )
+
+        assert result["success_count"] == 1  # only msg_new
+        assert result["already_executed"] == 1
+
+    def test_dry_run_not_counted_as_executed(self, tmp_path: Path):
+        """Dry-run entries should NOT prevent re-execution."""
+        msg = _make_message(rowid=100, message_id=5000)
+        cls = _make_classification(message_id=5000)
+        log = ActionLog(tmp_path / "action_log.db")
+
+        # Previous dry-run only
+        log.log_action(
+            message_id=5000, rowid_in_db=100, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=True, success=True, error_message=None,
+        )
+
+        result = execute_deletions(
+            messages=[msg],
+            classifications={msg.message_id: cls},
+            action_log=log,
+            dry_run=True,
+            batch_size=100,
+        )
+
+        assert result["success_count"] == 1
+        assert result["already_executed"] == 0
