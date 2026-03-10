@@ -15,16 +15,17 @@ I needed something that:
 - Lets me **review before deleting** — aggressive classification with zero false positives on things that matter
 - Operates **non-destructively** — moves to Trash (never permanent delete), with full undo capability
 
-This tool is the result: a multi-phase pipeline that combines 8 behavioral signals, GPU-accelerated content embeddings, and interactive review to clean up years of accumulated email safely.
+This tool is the result: a multi-phase pipeline that combines 14 behavioral/authentication signals, GPU-accelerated content embeddings, a feedback learning loop, and interactive web-based review to clean up years of accumulated email safely.
 
 ## What It Does
 
-- Reads the local Envelope Index SQLite database and `.emlx` files (read-only -- never modifies mail data directly)
-- Multi-signal classification: contact reputation, behavioral patterns (read/reply/flag), content analysis via MLX embeddings on Apple Silicon GPU
+- Reads the local Envelope Index SQLite database and `.emlx` files (read-only — never modifies mail data directly)
+- Multi-signal classification: contact reputation, behavioral patterns, email authentication (DKIM/SPF/DMARC), disposable domain detection, Apple Intelligence flags, content analysis via MLX embeddings
 - 4-tier system: **Trash** / **Keep-Active** / **Keep-Historical** / **Review**
-- Interactive terminal review with auto-triage for high-confidence items
-- Safe execution: moves to Trash via AppleScript (never permanent delete), with action log and restore capability
-- Optional Claude API fallback for remaining ambiguous emails (metadata-only payloads -- never sends body text)
+- Web-based review UI with cluster navigation, bulk actions, and keyboard shortcuts
+- Feedback loop: review decisions train per-sender preferences for future runs
+- Safe execution: batch AppleScript moves to Trash (never permanent delete), with action log and restore capability
+- Optional Claude API fallback for remaining ambiguous emails (metadata-only payloads — never sends body text)
 
 ## Requirements
 
@@ -48,96 +49,93 @@ The tool provides 6 subcommands that form a pipeline. Run them in order for a ty
 ### Global Options
 
 ```
---db PATH        Override Envelope Index database path
+--db PATH           Override Envelope Index database path
 --checkpoint PATH   Override checkpoint file path (default: ~/.icloud-cleanup/checkpoint.jsonl)
--v, --verbose    Enable debug logging
+-v, --verbose       Enable debug logging
 ```
 
 ### Typical Workflow
 
 ```
-scan -> classify -> analyze -> report -> review -> execute
+classify --full --analyze  →  review --web  →  execute --execute
 ```
 
-### scan -- Sender Volume Statistics
+### classify — Multi-Signal Classification
 
 ```bash
-uv run icloud_cleanup scan
+uv run python -m icloud_cleanup classify                          # incremental
+uv run python -m icloud_cleanup classify --full                   # full reclassification
+uv run python -m icloud_cleanup classify --full --analyze         # classify + embeddings + clustering
+uv run python -m icloud_cleanup classify --debug-scores user@example.com
 ```
 
-Shows email counts per sender, giving a quick overview of your inbox composition.
+Runs the 14-signal weighted scoring pipeline on all messages. Extracts DKIM/SPF/DMARC authentication headers from `.emlx` files. Loads feedback from previous review sessions. Supports incremental mode by default (only classifies new messages).
 
-### classify -- Metadata Classification (Phase 1)
-
-```bash
-uv run icloud_cleanup classify
-uv run icloud_cleanup classify --full
-uv run icloud_cleanup classify --debug-scores user@example.com
-```
-
-Runs the 8-signal weighted scoring pipeline on all messages. Supports incremental mode by default (only classifies new messages). Results are saved to a checkpoint file.
+With `--analyze`, also runs content analysis: parses `.emlx` email bodies, generates MLX embeddings on Apple Silicon GPU, clusters via HDBSCAN, and fuses content scores with metadata scores.
 
 | Flag | Description |
 |-|-|
 | `--full` | Force full reclassification, ignoring existing checkpoint |
+| `--analyze` | Run content analysis (embeddings + clustering + score fusion) after classification |
+| `--mail-dir PATH` | Override the Mail V10 directory (default: `~/Library/Mail/V10`) |
 | `--debug-scores SENDER` | Dump per-signal breakdown for a specific sender address |
 
-### analyze -- Content Analysis with MLX Embeddings (Phase 2)
+### analyze — Content Analysis Only
 
 ```bash
-uv run icloud_cleanup analyze
-uv run icloud_cleanup analyze --mail-dir /path/to/Mail/V10
+uv run python -m icloud_cleanup analyze
+uv run python -m icloud_cleanup analyze --mail-dir /path/to/Mail/V10
 ```
 
-Parses `.emlx` email bodies, generates embeddings on the Apple Silicon GPU, clusters similar emails via HDBSCAN, and fuses content scores with Phase 1 metadata scores for improved classification.
+Runs content analysis separately (if you've already classified). Parses `.emlx` bodies, generates embeddings, clusters, and fuses scores.
 
-| Flag | Description |
-|-|-|
-| `--mail-dir PATH` | Override the Mail V10 directory (default: `~/Library/Mail/V10`) |
-
-### report -- Classification Report
+### report — Classification Report
 
 ```bash
-uv run icloud_cleanup report
-uv run icloud_cleanup report --format json --output ./reports
-uv run icloud_cleanup report --format markdown
-uv run icloud_cleanup report --format all --output ./reports
+uv run python -m icloud_cleanup report
+uv run python -m icloud_cleanup report --format json --output ./reports
+uv run python -m icloud_cleanup report --format markdown
 ```
 
-Displays or exports the classification results. Terminal output shows tier summaries and top senders per tier.
+Displays or exports classification results. Terminal output shows tier summaries and top senders per tier.
 
 | Flag | Description |
 |-|-|
 | `--format terminal\|json\|markdown\|all` | Output format (default: `terminal`) |
-| `--json` | Shorthand for `--format json` |
-| `--markdown` | Shorthand for `--format markdown` |
 | `--output DIR` | Directory for exported report files |
 
-### review -- Interactive Review Session
+### review — Interactive Web Review
 
 ```bash
-uv run icloud_cleanup review
-uv run icloud_cleanup review --resume
-uv run icloud_cleanup review --reset
+uv run python -m icloud_cleanup review --web       # launch web UI at localhost:8899
+uv run python -m icloud_cleanup review             # terminal review (legacy)
+uv run python -m icloud_cleanup review --reset     # discard session and start fresh
 ```
 
-Launches an interactive terminal session to review classified emails. Auto-triage handles high-confidence items automatically, then presents remaining clusters for manual approve/skip/reclassify decisions. Sessions are saved after each decision for crash-safe resumability.
+Launches a web-based review UI for deciding on classified emails. Features:
+- Cluster sidebar with progress indicators
+- Bulk actions: select and trash/keep multiple emails at once
+- Domain and tier filtering, confidence range slider
+- Keyboard shortcuts (j/k navigate, d/k/u decide, x toggle select)
+- Compact and sender-grouped view modes
+- Sessions auto-save after each decision for crash-safe resumability
 
 | Flag | Description |
 |-|-|
+| `--web` | Launch web review UI (recommended) |
 | `--resume` | Continue an existing review session |
 | `--reset` | Discard existing session and start fresh |
 | `--session PATH` | Custom session file path |
 
-### execute -- Execute Approved Deletions
+### execute — Execute Approved Deletions
 
 ```bash
-uv run icloud_cleanup execute              # dry-run (default)
-uv run icloud_cleanup execute --execute    # actually move to Trash
-uv run icloud_cleanup execute --restore    # undo previous deletions
+uv run python -m icloud_cleanup execute              # dry-run (default)
+uv run python -m icloud_cleanup execute --execute    # actually move to Trash
+uv run python -m icloud_cleanup execute --restore    # undo previous deletions
 ```
 
-Carries out deletions approved during review. Dry-run by default -- pass `--execute` to actually move messages to Trash via AppleScript. Supports batch rate limiting and full restore from the action log.
+Carries out deletions approved during review. Dry-run by default — pass `--execute` to actually move messages to Trash via batch AppleScript. Records per-sender feedback for the learning loop.
 
 | Flag | Description |
 |-|-|
@@ -149,23 +147,34 @@ Carries out deletions approved during review. Dry-run by default -- pass `--exec
 
 ## How Classification Works
 
-### Phase 1: Metadata Scoring
+### Phase 1: Metadata Scoring (14 signals)
 
-Eight weighted signals produce a confidence score (0-1) per message:
+Ten always-on signals plus four optional signals produce a confidence score (0–1) per message:
 
-1. **Contact reputation** -- have you sent to or received replies from this sender?
-2. **Read rate** -- what fraction of this sender's emails have you read?
-3. **Reply rate** -- how often have you replied to this sender?
-4. **Recency** -- when was the last interaction?
-5. **Frequency** -- volume normalized against engagement
-6. **List-ID presence** -- is this a mailing list?
-7. **Document attachments** -- emails with document attachments score higher
-8. **Mailing list flags** -- automated conversation and unsubscribe indicators
+**Always-on signals:**
+1. **Contact reputation** (0.20) — bidirectional communication, system contacts match
+2. **Frequency** (0.10) — volume normalized against engagement
+3. **Recency** (0.10) — when was the last interaction?
+4. **Reply rate** (0.12) — how often have you replied to this sender?
+5. **Apple category** (0.10) — Apple Mail's internal categorization
+6. **Apple high-impact** (0.05) — Apple Intelligence importance flag
+7. **Automation detection** (0.08) — automated conversation indicators
+8. **Flagged history** (0.04) — has the user flagged emails from this sender?
+9. **Mailing list** (0.05) — List-ID header present
+10. **No-reply sender** (0.03) — noreply/mailer-daemon patterns
+
+**Optional signals (fire only when informative):**
+11. **Junk level** (0.07) — iCloud spam classification (from `server_messages` table)
+12. **Urgent** (0.05) — Apple Intelligence urgency flag
+13. **Disposable domain** (0.05) — sender domain on disposable email blocklist (5,197 domains)
+14. **Email authentication** (0.06) — DKIM/SPF/DMARC results extracted from `.emlx` headers
+
+**Feedback signal** (0.10) — Laplace-smoothed per-sender preference from previous review sessions. Omitted on first run.
 
 ### Phase 2: Content Analysis
 
 - MLX embeddings (Apple Silicon GPU) generate vector representations of email bodies
-- HDBSCAN clustering groups similar emails
+- HDBSCAN clustering with leaf selection groups similar emails; sub-clustering for oversized clusters
 - TF-IDF labeling names each cluster
 - Content scores fuse with metadata scores for final tier assignment
 
@@ -179,15 +188,17 @@ Emails from contacts you've replied to, sent to, or that match system contacts a
 |-|-|
 | `scanner` | Reads Envelope Index SQLite DB, extracts messages and sender stats |
 | `contacts` | Builds contact reputation profiles from behavioral signals + system contacts |
-| `classifier` | 8-signal weighted scoring, tier assignment, confidence computation |
-| `emlx_parser` | Parses `.emlx` files to extract email body text |
+| `classifier` | 14-signal weighted scoring, tier assignment, confidence computation |
+| `emlx_parser` | Parses `.emlx` files for body text extraction and authentication headers |
 | `embedder` | MLX GPU embedding generation for email content |
 | `clusterer` | HDBSCAN clustering + TF-IDF cluster labeling + content score derivation |
+| `feedback` | SQLite-backed per-sender feedback store for learning loop |
 | `auto_triage` | Automatic resolution of high-confidence Review-tier items |
 | `propagation` | Domain-level and subdomain decision propagation across clusters |
 | `report` | Terminal, JSON, and Markdown report generation |
-| `review` | Interactive terminal review session with crash-safe persistence |
-| `executor` | AppleScript-based trash execution with action log and restore |
+| `review` | Review session management with crash-safe persistence |
+| `web` | Flask web server + single-file HTML review UI |
+| `executor` | Batch AppleScript trash execution with action log and restore |
 | `api_fallback` | Claude API integration for ambiguous emails (metadata-only payloads) |
 | `checkpoint` | JSONL checkpoint save/load for incremental classification |
 | `models` | Domain dataclasses: Message, ContactProfile, Classification, Tier |
@@ -199,12 +210,13 @@ Emails from contacts you've replied to, sent to, or that match system contacts a
 uv run pytest
 ```
 
-348 tests covering all modules.
+464 tests covering all modules.
 
 ## Data Safety
 
-- **Read-only access** -- all queries against the Envelope Index are SELECT-only
-- **No permanent deletes** -- deletions use AppleScript `set mailbox of` to move messages to Trash
-- **Action log** -- every deletion is recorded in a SQLite action log with full restore capability
-- **Dry-run by default** -- the `execute` command requires an explicit `--execute` flag
-- **Privacy** -- all classification happens on-device; Claude API (if used) receives metadata-only payloads, never email body text
+- **Read-only access** — all queries against the Envelope Index are SELECT-only
+- **No permanent deletes** — deletions use AppleScript `set mailbox of` to move messages to Trash
+- **Action log** — every deletion is recorded in a SQLite action log with full restore capability
+- **Dry-run by default** — the `execute` command requires an explicit `--execute` flag
+- **Feedback loop** — review decisions improve future classification, stored locally
+- **Privacy** — all classification happens on-device; Claude API (if used) receives metadata-only payloads, never email body text
