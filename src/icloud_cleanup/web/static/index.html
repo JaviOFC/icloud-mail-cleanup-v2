@@ -242,6 +242,14 @@ button.danger:hover { background: rgba(255,107,107,0.15); }
 button.safe { border-color: var(--safe); color: var(--safe); }
 button.safe:hover { background: rgba(81,207,102,0.15); }
 
+/* Inline row action buttons */
+.row-actions { display: flex; gap: 4px; }
+.row-actions button {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+}
+
 /* Email table */
 .email-table-wrap {
   flex: 1;
@@ -282,8 +290,30 @@ tbody tr.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
 td { padding: 8px 12px; vertical-align: top; }
 td.cb { width: 32px; text-align: center; }
 td.sender { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-td.subject { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.subject { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
 td.conf { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Hover preview popover */
+.email-popover {
+  position: fixed;
+  z-index: 9999;
+  width: 400px;
+  max-height: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  overflow: hidden;
+}
+.email-popover .pop-sender { color: var(--accent); font-weight: 600; margin-bottom: 4px; word-break: break-all; }
+.email-popover .pop-subject { color: var(--text); font-weight: 500; margin-bottom: 8px; }
+.email-popover .pop-body { color: var(--text2); white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow: hidden; }
+.email-popover .pop-body em { color: var(--text3, #666); }
+.email-popover .pop-source { color: var(--text3, #555); font-size: 10px; margin-top: 6px; font-style: italic; }
 td.date { white-space: nowrap; color: var(--text2); font-variant-numeric: tabular-nums; }
 .tier-trash { color: var(--destructive); }
 .tier-keep_active { color: var(--safe); }
@@ -1207,12 +1237,29 @@ function renderEmails() {
     const selClass = state.selected.has(e.message_id) ? ' selected' : '';
     const tr = el('tr', { className: (decClass + focusClass + selClass).trim(), 'data-mid': String(e.message_id), 'data-idx': String(idx) });
 
-    // Checkbox
+    // Checkbox with shift+click range selection
     const cb = el('input', { type: 'checkbox', 'data-mid': String(e.message_id) });
     if (state.selected.has(e.message_id)) cb.checked = true;
-    cb.addEventListener('change', () => {
-      if (cb.checked) state.selected.add(e.message_id); else state.selected.delete(e.message_id);
-      tr.classList.toggle('selected', cb.checked);
+    cb.addEventListener('click', (ev) => {
+      if (ev.shiftKey && state._lastCheckedIdx != null) {
+        const from = Math.min(state._lastCheckedIdx, idx);
+        const to = Math.max(state._lastCheckedIdx, idx);
+        const checked = cb.checked;
+        for (let i = from; i <= to; i++) {
+          const mid = state.emails[i].message_id;
+          if (checked) state.selected.add(mid); else state.selected.delete(mid);
+          const row = document.querySelector(`tr[data-idx="${i}"]`);
+          if (row) {
+            const rowCb = row.querySelector('input[type="checkbox"]');
+            if (rowCb) rowCb.checked = checked;
+            row.classList.toggle('selected', checked);
+          }
+        }
+      } else {
+        if (cb.checked) state.selected.add(e.message_id); else state.selected.delete(e.message_id);
+        tr.classList.toggle('selected', cb.checked);
+      }
+      state._lastCheckedIdx = idx;
       updateBulkBar();
     });
     tr.appendChild(el('td', { className: 'cb' }, [cb]));
@@ -1226,7 +1273,9 @@ function renderEmails() {
     tr.appendChild(senderTd);
 
     // Subject
-    tr.appendChild(el('td', { className: 'subject', title: e.subject, textContent: e.subject }));
+    const subjectTd = el('td', { className: 'subject', textContent: e.subject });
+    setupRowPopover(subjectTd, e);
+    tr.appendChild(subjectTd);
 
     // Tier
     tr.appendChild(el('td', {}, [el('span', { className: 'tier-' + e.tier, textContent: tierLabel(e.tier) })]));
@@ -1237,7 +1286,7 @@ function renderEmails() {
     // Date
     tr.appendChild(el('td', { className: 'date', textContent: formatDate(e.date) }));
 
-    // Decision — blank unless user has made a decision
+    // Decision — inline actions when undecided, badge + undo when decided
     const statusTd = el('td');
     if (e.decision) {
       const newLabel = e.decision === 'approve' ? 'delete' : 'keep';
@@ -1252,6 +1301,31 @@ function renderEmails() {
         await Promise.all([loadEmails(), loadClusters(), updateHeader(), loadProtectedConflicts()]);
       });
       statusTd.appendChild(undoBtn);
+    } else {
+      const actions = el('div', { className: 'row-actions' });
+      const delBtn = el('button', { className: 'danger', textContent: 'Delete' });
+      delBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        await apiPost('/api/decide', { message_ids: [e.message_id], action: 'trash' });
+        showToast('Email marked for deletion', { type: 'destructive', undo: async () => {
+          await apiPost('/api/undo', { message_ids: [e.message_id] });
+          await Promise.all([loadEmails(), loadClusters(), updateHeader(), loadProtectedConflicts()]);
+        }});
+        await Promise.all([loadEmails(), loadClusters(), updateHeader(), loadProtectedConflicts()]);
+      });
+      const keepBtn = el('button', { className: 'safe', textContent: 'Keep' });
+      keepBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        await apiPost('/api/decide', { message_ids: [e.message_id], action: 'keep' });
+        showToast('Email marked to keep', { type: 'success', undo: async () => {
+          await apiPost('/api/undo', { message_ids: [e.message_id] });
+          await Promise.all([loadEmails(), loadClusters(), updateHeader(), loadProtectedConflicts()]);
+        }});
+        await Promise.all([loadEmails(), loadClusters(), updateHeader(), loadProtectedConflicts()]);
+      });
+      actions.appendChild(delBtn);
+      actions.appendChild(keepBtn);
+      statusTd.appendChild(actions);
     }
     tr.appendChild(statusTd);
 
@@ -1265,6 +1339,72 @@ function renderEmails() {
   });
 
   updateBulkBar();
+}
+
+// --- Hover preview popover ---
+let _popover = null;
+let _popoverTimer = null;
+const _bodyCache = {};
+
+function hidePopover() {
+  clearTimeout(_popoverTimer);
+  _popoverTimer = null;
+  if (_popover) { _popover.remove(); _popover = null; }
+}
+
+function setupRowPopover(td, email) {
+  td.addEventListener('mouseenter', (ev) => {
+    clearTimeout(_popoverTimer);
+    _popoverTimer = setTimeout(() => showPopover(ev, email), 300);
+  });
+  td.addEventListener('mouseleave', hidePopover);
+  td.addEventListener('mousedown', hidePopover);
+}
+
+async function showPopover(ev, email) {
+  hidePopover();
+  const pop = document.createElement('div');
+  pop.className = 'email-popover';
+
+  const senderDiv = el('div', { className: 'pop-sender', textContent: email.sender });
+  const subjDiv = el('div', { className: 'pop-subject', textContent: email.subject });
+  const bodyDiv = el('div', { className: 'pop-body' });
+  bodyDiv.appendChild(el('em', { textContent: 'Loading\u2026' }));
+  pop.appendChild(senderDiv);
+  pop.appendChild(subjDiv);
+  pop.appendChild(bodyDiv);
+
+  document.body.appendChild(pop);
+  _popover = pop;
+
+  // Position near cursor, clamped to viewport
+  const pad = 12;
+  let x = ev.clientX + pad;
+  let y = ev.clientY + pad;
+  if (x + 420 > window.innerWidth) x = ev.clientX - 400 - pad;
+  if (y + 290 > window.innerHeight) y = Math.max(pad, window.innerHeight - 290);
+  pop.style.left = x + 'px';
+  pop.style.top = y + 'px';
+
+  // Fetch body (cached)
+  const mid = email.message_id;
+  if (!_bodyCache[mid]) {
+    try { _bodyCache[mid] = await api(`/api/email/${mid}/body`); }
+    catch { _bodyCache[mid] = { body: null }; }
+  }
+  if (_popover !== pop) return; // stale
+
+  const data = _bodyCache[mid];
+  bodyDiv.textContent = '';
+  if (data.body) {
+    bodyDiv.textContent = data.body;
+    if (data.source) {
+      const src = el('div', { className: 'pop-source', textContent: data.source === 'summary' ? 'Apple Intelligence summary' : '.emlx body' });
+      bodyDiv.appendChild(src);
+    }
+  } else {
+    bodyDiv.appendChild(el('em', { textContent: 'No body preview available' }));
+  }
 }
 
 function createEmptyState() {
@@ -2344,7 +2484,6 @@ async function loadProtectedConflicts() {
         const subj = document.createElement('span');
         subj.className = 'pc-email-subject';
         subj.textContent = e.subject;
-        subj.title = e.subject;
         row.appendChild(subj);
         const btn = document.createElement('button');
         if (e.overridden) {
