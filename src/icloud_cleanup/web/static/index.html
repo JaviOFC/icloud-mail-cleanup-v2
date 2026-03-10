@@ -129,6 +129,7 @@ header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
 }
 .badge.approve { background: rgba(255,107,107,0.3); color: var(--destructive); }
 .badge.skip { background: rgba(81,207,102,0.3); color: var(--safe); }
+.shield { font-size: 11px; margin-left: 4px; opacity: 0.6; cursor: help; }
 .conf-dot {
   width: 6px;
   height: 6px;
@@ -581,6 +582,10 @@ thead th.sortable:hover { color: var(--text); }
 /* Sender table */
 .sender-table-wrap { flex: 1; overflow-y: auto; }
 .sender-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sender-table-wrap th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.sender-table-wrap th.sortable:hover { color: var(--accent); }
+.sender-table-wrap th .sort-arrow { margin-left: 4px; font-size: 10px; opacity: 0.4; }
+.sender-table-wrap th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
 .sender-row { cursor: pointer; }
 .sender-row:hover { background: var(--surface2); }
 .sender-row td { padding: 8px 12px; font-variant-numeric: tabular-nums; }
@@ -844,14 +849,14 @@ thead th.sortable:hover { color: var(--text); }
         </div>
         <table>
           <thead>
-            <tr>
-              <th>Domain / Sender</th>
-              <th>Emails</th>
-              <th>Clusters</th>
-              <th>Avg Conf</th>
-              <th>Trash</th>
-              <th>Keep</th>
-              <th>Pending</th>
+            <tr id="senderHead">
+              <th class="sortable" data-sort="key">Domain / Sender <span class="sort-arrow"></span></th>
+              <th class="sortable sorted" data-sort="count">Emails <span class="sort-arrow">▼</span></th>
+              <th class="sortable" data-sort="clusters">Clusters <span class="sort-arrow"></span></th>
+              <th class="sortable" data-sort="avg_confidence">Avg Conf <span class="sort-arrow"></span></th>
+              <th class="sortable" data-sort="trash_count">Trash <span class="sort-arrow"></span></th>
+              <th class="sortable" data-sort="keep_count">Keep <span class="sort-arrow"></span></th>
+              <th class="sortable" data-sort="pending_count">Pending <span class="sort-arrow"></span></th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -930,6 +935,8 @@ const state = {
   decisionsPerMinute: [],
   senderPage: 1,
   senderPerPage: 50,
+  senderSortKey: 'count',
+  senderSortDir: 'desc',
 };
 
 // --- Fetch helpers ---
@@ -1143,7 +1150,12 @@ function renderEmails() {
     tr.appendChild(el('td', { className: 'cb' }, [cb]));
 
     // Sender
-    tr.appendChild(el('td', { className: 'sender', title: e.sender, textContent: e.sender }));
+    const senderTd = el('td', { className: 'sender', title: e.sender });
+    senderTd.appendChild(document.createTextNode(e.sender));
+    if (e.protected) {
+      senderTd.appendChild(el('span', { className: 'shield', title: 'Protected — executor will skip deletion', textContent: '\u{1F6E1}' }));
+    }
+    tr.appendChild(senderTd);
 
     // Subject
     tr.appendChild(el('td', { className: 'subject', title: e.subject, textContent: e.subject }));
@@ -1236,6 +1248,7 @@ async function toggleExpand(mid, tr) {
 
   const info = el('div', { className: 'signal-info' });
   const parts = [];
+  if (email && email.protected) parts.push('\u{1F6E1} Protected (executor will skip deletion)');
   if (data.signals) parts.push('Signals: ' + data.signals);
   if (data.content_score != null) parts.push('Content score: ' + data.content_score.toFixed(3));
   if (data.cluster_label) parts.push('Cluster: ' + data.cluster_label);
@@ -1936,6 +1949,30 @@ async function loadSenders() {
   hideLoading();
 }
 
+function sortSenders() {
+  const key = state.senderSortKey;
+  const dir = state.senderSortDir === 'asc' ? 1 : -1;
+  state.senders.sort((a, b) => {
+    const av = key === 'clusters' ? a.top_clusters.length : a[key];
+    const bv = key === 'clusters' ? b.top_clusters.length : b[key];
+    if (typeof av === 'string') return dir * av.localeCompare(bv);
+    return dir * (av - bv);
+  });
+}
+
+function updateSortHeaders() {
+  for (const th of document.querySelectorAll('#senderHead th.sortable')) {
+    const arrow = th.querySelector('.sort-arrow');
+    if (th.dataset.sort === state.senderSortKey) {
+      th.classList.add('sorted');
+      arrow.textContent = state.senderSortDir === 'asc' ? '▲' : '▼';
+    } else {
+      th.classList.remove('sorted');
+      arrow.textContent = '';
+    }
+  }
+}
+
 function renderSenders() {
   const tbody = document.getElementById('senderBody');
   tbody.replaceChildren();
@@ -1947,6 +1984,9 @@ function renderSenders() {
     renderSenderPagination();
     return;
   }
+
+  sortSenders();
+  updateSortHeaders();
 
   // Client-side pagination
   const total = state.senders.length;
@@ -2081,6 +2121,21 @@ async function toggleSenderExpand(key, tr) {
   newRow.appendChild(td);
   tr.after(newRow);
 }
+
+// Sender column sort
+document.querySelectorAll('#senderHead th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (state.senderSortKey === key) {
+      state.senderSortDir = state.senderSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.senderSortKey = key;
+      state.senderSortDir = key === 'key' ? 'asc' : 'desc';
+    }
+    state.senderPage = 1;
+    renderSenders();
+  });
+});
 
 // Sender group toggle (domain / sender)
 document.querySelectorAll('#senderGroupToggle button').forEach(btn => {
