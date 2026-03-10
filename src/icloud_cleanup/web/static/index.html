@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iCloud Mail Cleanup — Review</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242836;
+  --border: #2e3345;
+  --border-subtle: rgba(46, 51, 69, 0.5);
+  --text: #e2e4ea;
+  --text2: #9096a8;
+  --accent: #6c8cff;
+  --destructive: #ff6b6b;
+  --safe: #51cf66;
+  --warning: #fcc419;
+  --info: #74c0fc;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Layout */
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+}
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+header h1 { font-size: 16px; font-weight: 600; white-space: nowrap; }
+.progress-bar {
+  flex: 1;
+  max-width: 400px;
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.stats { font-size: 13px; color: var(--text2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.stats span { color: var(--text); font-weight: 600; }
+.session-timer { font-size: 12px; color: var(--text2); white-space: nowrap; }
+
+.main {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px;
+}
+.sidebar-search {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  margin-bottom: 6px;
+}
+.sidebar-search:focus { border-color: var(--accent); }
+.cluster-card {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  transition: background 0.15s;
+}
+.cluster-card:hover { background: var(--surface); }
+.cluster-card.active { background: var(--surface); border-color: var(--accent); }
+.cluster-card .label {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cluster-card .meta {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.cluster-card .count {
+  background: var(--surface2);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cluster-card.decided .label { opacity: 0.5; }
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.badge.approve { background: rgba(255,107,107,0.3); color: var(--destructive); }
+.badge.skip { background: rgba(81,207,102,0.3); color: var(--safe); }
+.conf-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Content */
+.content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Loading bar */
+.loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 50;
+  overflow: hidden;
+  display: none;
+}
+.loading-bar.active { display: block; }
+.loading-bar::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  animation: loadingSlide 1s ease-in-out infinite;
+}
+@keyframes loadingSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* Filters */
+.filters {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.filters input, .filters select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+}
+.filters input:focus, .filters select:focus { border-color: var(--accent); }
+.filters input[type="search"] { width: 220px; }
+.filters select { min-width: 100px; }
+.filters .range-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.filters .range-group input[type="range"] {
+  width: 80px;
+  accent-color: var(--accent);
+  padding: 0;
+}
+.filter-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+.filters-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.compact-toggle { font-size: 12px; }
+.compact-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sender-btn { font-size: 12px; }
+.sender-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Bulk actions — floating */
+.bulk-bar {
+  position: fixed;
+  bottom: 48px;
+  left: 280px;
+  right: 0;
+  background: var(--surface2);
+  border-top: 1px solid var(--border);
+  padding: 8px 16px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  z-index: 30;
+  box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+}
+.bulk-bar.visible { display: flex; }
+button {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+button:hover { background: var(--border); }
+button.danger { border-color: var(--destructive); color: var(--destructive); }
+button.danger:hover { background: rgba(255,107,107,0.15); }
+button.safe { border-color: var(--safe); color: var(--safe); }
+button.safe:hover { background: rgba(81,207,102,0.15); }
+
+/* Email table */
+.email-table-wrap {
+  flex: 1;
+  overflow-y: auto;
+}
+.email-table-wrap.has-bulk-bar { padding-bottom: 52px; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  z-index: 1;
+}
+tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.1s, opacity 0.15s;
+}
+tbody tr:hover { background: var(--surface2); }
+tbody tr.decided-trash { opacity: 0.5; }
+tbody tr.decided-keep { background: rgba(81,207,102,0.05); }
+tbody tr.focused { outline: 2px solid var(--accent); outline-offset: -2px; }
+td { padding: 8px 12px; vertical-align: top; }
+td.cb { width: 32px; text-align: center; }
+td.sender { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.subject { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.conf { text-align: right; font-variant-numeric: tabular-nums; }
+td.date { white-space: nowrap; color: var(--text2); font-variant-numeric: tabular-nums; }
+.tier-trash { color: var(--destructive); }
+.tier-keep_active { color: var(--safe); }
+.tier-keep_historical { color: var(--info); }
+.tier-review { color: var(--warning); }
+
+/* Expanded row */
+.expanded-row td {
+  padding: 12px 16px 12px 44px;
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.6;
+  overflow: hidden;
+}
+.expanded-row.expanding td { max-height: 0; opacity: 0; }
+.expanded-row.expanded td { max-height: 500px; opacity: 1; transition: max-height 0.15s ease-out, opacity 0.15s ease-out; }
+.body-snippet {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.signal-info {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text2);
+}
+.expand-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.expand-actions .current-decision {
+  font-size: 12px;
+  color: var(--text2);
+  margin-right: 8px;
+}
+
+/* Pagination */
+.pagination {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
+.pagination .page-buttons { display: flex; gap: 4px; align-items: center; }
+.pagination .page-size-select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 4px; font-size: 12px; margin-left: 12px; cursor: pointer; }
+.pagination button { min-width: 32px; }
+.pagination button.active-page { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Cluster actions */
+.cluster-actions {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.cluster-actions.visible { display: flex; }
+.cluster-actions .cluster-name { font-weight: 600; flex: 1; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text2); }
+
+input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+
+/* Guide banner */
+.guide {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.7;
+}
+.guide.hidden { display: none; }
+.guide-steps {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.guide-step {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 180px;
+}
+.step-num {
+  background: var(--accent);
+  color: #fff;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.guide-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 4px;
+  line-height: 1;
+}
+.guide-close:hover { color: var(--text); background: none; border: none; }
+.guide-toggle {
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.guide-toggle:hover { text-decoration: underline; background: none; border: none; }
+.body-source {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--surface2);
+  color: var(--text2);
+  margin-left: 6px;
+}
+.action-hint {
+  font-size: 11px;
+  color: var(--text2);
+  flex: 1;
+  font-style: italic;
+}
+
+/* Decisions summary in sidebar */
+.decisions-summary {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.decisions-summary .line {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.decisions-summary .val { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.decisions-summary .val-red { font-weight: 600; color: var(--destructive); font-variant-numeric: tabular-nums; }
+.decisions-summary .val-green { font-weight: 600; color: var(--safe); font-variant-numeric: tabular-nums; }
+.decisions-summary .note {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+/* Undo button on decided rows */
+button.undo {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-color: var(--text2);
+  color: var(--text2);
+}
+button.undo:hover { border-color: var(--accent); color: var(--accent); }
+
+/* View tabs */
+.view-tabs {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+}
+.view-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-tab:hover { color: var(--text); background: none; }
+.view-tab.active { color: var(--text); border-bottom-color: var(--accent); background: none; }
+.view-tab.dimmed { opacity: 0.4; pointer-events: none; }
+.view-tab .tab-count {
+  font-size: 11px;
+  background: var(--surface2);
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.view-tab.active .tab-count { background: var(--accent); color: #fff; }
+.view-tab.tab-delete .tab-count { color: var(--destructive); }
+.view-tab.tab-keep .tab-count { color: var(--safe); }
+.view-tab.tab-delete.active .tab-count { color: #fff; background: var(--destructive); }
+.view-tab.tab-keep.active .tab-count { color: #fff; background: var(--safe); }
+
+/* Quick stats bar */
+.quick-stats {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 4px 16px;
+  font-size: 12px;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+}
+.quick-stats span { color: var(--text); font-weight: 600; }
+
+/* Cluster progress bar */
+.cluster-progress {
+  height: 3px;
+  background: var(--surface2);
+  border-radius: 2px;
+  margin-top: 5px;
+  overflow: hidden;
+  display: flex;
+}
+.cluster-progress .bar-trash {
+  height: 100%;
+  background: var(--destructive);
+  transition: width 0.2s;
+}
+.cluster-progress .bar-keep {
+  height: 100%;
+  background: var(--safe);
+  transition: width 0.2s;
+}
+.cluster-card .progress-text {
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.cluster-card.done { opacity: 0.6; }
+.cluster-card.partial .label { color: var(--warning); }
+
+/* Sortable headers */
+thead th.sortable { cursor: pointer; user-select: none; }
+thead th.sortable:hover { color: var(--text); }
+.sort-indicator { margin-left: 4px; font-size: 10px; }
+
+/* Sender view toggle */
+.view-tabs .tab-spacer { flex: 1; }
+.sender-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.sender-toggle button {
+  border: none;
+  border-radius: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--text2);
+}
+.sender-toggle button.active { background: var(--accent); color: #fff; }
+.sender-toggle button:hover:not(.active) { background: var(--surface2); }
+
+/* Sender table */
+.sender-table-wrap { flex: 1; overflow-y: auto; }
+.sender-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sender-row { cursor: pointer; }
+.sender-row:hover { background: var(--surface2); }
+.sender-row td { padding: 8px 12px; font-variant-numeric: tabular-nums; }
+.sender-row .sender-key { font-weight: 600; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sender-row .sender-actions { white-space: nowrap; }
+.sender-row .sender-actions button { margin-left: 4px; }
+.sender-expanded { background: var(--surface); }
+.sender-expanded td { padding: 0; }
+.sender-emails-inner { max-height: 300px; overflow-y: auto; padding: 8px 16px 8px 32px; }
+.sender-emails-inner table { font-size: 12px; }
+.sender-emails-inner td { padding: 4px 8px; }
+.sender-pagination {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text2);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.sender-pagination .page-buttons { display: flex; gap: 4px; }
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text2);
+  font-size: 15px;
+  text-align: center;
+  gap: 12px;
+}
+.empty-state .empty-title { font-size: 16px; color: var(--text); font-weight: 600; }
+
+/* Toast container */
+#toastContainer {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: all;
+  animation: toastIn 0.25s ease-out;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  max-width: 380px;
+}
+.toast.fade-out { animation: toastOut 0.2s ease-in forwards; }
+.toast.toast-success { border-left: 3px solid var(--safe); }
+.toast.toast-destructive { border-left: 3px solid var(--destructive); }
+.toast.toast-info { border-left: 3px solid var(--info); }
+.toast .toast-msg { flex: 1; }
+.toast .toast-undo {
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.toast .toast-undo:hover { text-decoration: underline; background: none; border: none; }
+.toast .toast-close {
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 16px;
+  background: none;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+.toast .toast-close:hover { color: var(--text); background: none; border: none; }
+@keyframes toastIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes toastOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateX(30px); }
+}
+
+/* Shortcuts overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+}
+.overlay.hidden { display: none; }
+.overlay-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+}
+.overlay-content h2 { font-size: 16px; margin-bottom: 16px; }
+.shortcut-table { width: 100%; font-size: 13px; }
+.shortcut-table td { padding: 4px 0; }
+.shortcut-table td:first-child { font-weight: 600; color: var(--accent); width: 80px; }
+
+/* Compact mode */
+.compact td { padding: 4px 8px; font-size: 11px; }
+.compact .expanded-row td { padding: 8px 12px 8px 32px; }
+
+/* Micro-transitions */
+@keyframes fadeInRow {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>iCloud Mail Cleanup</h1>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="stats" id="headerStats">Loading...</div>
+    <div class="session-timer" id="sessionTimer"></div>
+    <button id="keepRemainingBtn" style="font-size:12px;display:none">Keep all remaining</button>
+    <button class="guide-toggle" id="guideToggle" style="display:none">How to use</button>
+  </header>
+
+  <div class="guide" id="guide">
+    <div class="guide-steps">
+      <div class="guide-step">
+        <span class="step-num">1</span>
+        <span>Pick a <b>cluster</b> from the sidebar</span>
+      </div>
+      <div class="guide-step">
+        <span class="step-num">2</span>
+        <span><b>Filter</b> by domain, search, tier, or confidence</span>
+      </div>
+      <div class="guide-step">
+        <span class="step-num">3</span>
+        <span><b>Decide</b>: trash or keep — individually or in bulk</span>
+      </div>
+      <div class="guide-step">
+        <span class="step-num">4</span>
+        <span><b>Done?</b> Ctrl+C, then run <code>execute</code></span>
+      </div>
+    </div>
+    <button class="guide-close" id="guideClose" title="Dismiss">&times;</button>
+  </div>
+
+  <div class="main">
+    <div class="sidebar" id="sidebar">
+      <input type="search" class="sidebar-search" id="clusterSearch" placeholder="Filter clusters...">
+      <div class="cluster-card active" data-cluster="">
+        <div class="label">All emails</div>
+        <div class="meta"><span class="count" id="totalCount">—</span></div>
+      </div>
+      <div id="clusterList"></div>
+      <div class="decisions-summary" id="decisionsSummary"></div>
+    </div>
+
+    <div class="content">
+      <div class="loading-bar" id="loadingBar"></div>
+      <div class="view-tabs" id="viewTabs">
+        <button class="view-tab active" data-view="">All <span class="tab-count" id="tabAll">—</span></button>
+        <button class="view-tab" data-view="pending">Needs review <span class="tab-count" id="tabPending">—</span></button>
+        <button class="view-tab tab-delete" data-view="approve">Marked for deletion <span class="tab-count" id="tabDelete">—</span></button>
+        <button class="view-tab tab-keep" data-view="skip">Marked to keep <span class="tab-count" id="tabKeep">—</span></button>
+        <div class="tab-spacer"></div>
+      </div>
+      <div class="quick-stats" id="quickStats"></div>
+      <div class="filters">
+        <input type="search" id="searchInput" placeholder="Search subject or sender...">
+        <select id="domainFilter"><option value="">All domains</option></select>
+        <select id="tierFilter">
+          <option value="">All tiers</option>
+          <option value="trash">Delete</option>
+          <option value="review">Review</option>
+          <option value="keep_active">Active</option>
+          <option value="keep_historical">Historical</option>
+        </select>
+        <div class="range-group">
+          <span class="filter-label">Conf</span>
+          <input type="range" id="confMin" min="0" max="1" step="0.05" value="0">
+          <span id="confMinLabel">0</span>
+          —
+          <input type="range" id="confMax" min="0" max="1" step="0.05" value="1">
+          <span id="confMaxLabel">1</span>
+        </div>
+        <button id="clearFilters">Clear</button>
+        <div class="filters-right">
+          <button class="compact-toggle" id="compactToggle">Compact</button>
+          <button class="sender-btn" id="senderViewBtn">Senders</button>
+        </div>
+      </div>
+
+      <div class="cluster-actions" id="clusterActions">
+        <span class="cluster-name" id="clusterActionName"></span>
+        <span class="action-hint" id="clusterHint"></span>
+        <button class="danger" id="btnClusterTrash" title="Mark every email in this cluster for deletion.">Delete entire cluster</button>
+        <button class="safe" id="btnClusterKeep" title="Keep every email in this cluster.">Keep entire cluster</button>
+        <button class="undo" id="btnClusterReset" title="Clear all decisions in this cluster.">Reset cluster</button>
+      </div>
+
+      <div class="bulk-bar" id="bulkBar">
+        <span id="selectedCount">0</span> selected
+        <button class="danger" id="btnTrashSelected" title="Mark checked emails for deletion">Delete selected</button>
+        <button class="safe" id="btnKeepSelected" title="Mark checked emails to keep">Keep selected</button>
+        <button id="btnSelectAllDomain">Select all from domain</button>
+        <button id="btnDeselectAll">Deselect all</button>
+      </div>
+
+      <div class="email-table-wrap" id="emailTableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="cb"><input type="checkbox" id="selectAll"></th>
+              <th class="sortable" data-sort="sender">Sender</th>
+              <th class="sortable" data-sort="subject">Subject</th>
+              <th class="sortable" data-sort="tier">Tier</th>
+              <th class="sortable" data-sort="confidence">Conf</th>
+              <th class="sortable" data-sort="date">Date<span class="sort-indicator" id="sort-date">&#x25BC;</span></th>
+              <th>Decision</th>
+            </tr>
+          </thead>
+          <tbody id="emailBody"></tbody>
+        </table>
+      </div>
+
+      <div class="sender-table-wrap" id="senderTableWrap" style="display:none">
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:8px">
+          <div class="sender-toggle" id="senderGroupToggle">
+            <button class="active" data-group="domain">By domain</button>
+            <button data-group="sender">By sender</button>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Domain / Sender</th>
+              <th>Emails</th>
+              <th>Clusters</th>
+              <th>Avg Conf</th>
+              <th>Trash</th>
+              <th>Keep</th>
+              <th>Pending</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="senderBody"></tbody>
+        </table>
+        <div class="sender-pagination" id="senderPagination" style="display:none">
+          <span id="senderPageInfo">—</span>
+          <div class="page-buttons" id="senderPageButtons"></div>
+        </div>
+      </div>
+
+      <div class="pagination" id="mainPagination">
+        <span id="pageInfo">—</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="page-buttons" id="pageButtons"></div>
+          <select id="pageSizeSelect" class="page-size-select" title="Emails per page">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="150">150</option>
+            <option value="200">200</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="shortcutsOverlay" class="overlay hidden">
+  <div class="overlay-content">
+    <h2>Keyboard shortcuts</h2>
+    <table class="shortcut-table">
+      <tr><td>&#x2193; / &#x2191;</td><td>Navigate rows</td></tr>
+      <tr><td>d</td><td>Mark focused row for deletion</td></tr>
+      <tr><td>k</td><td>Mark focused row to keep</td></tr>
+      <tr><td>u</td><td>Undo focused row decision</td></tr>
+      <tr><td>Enter</td><td>Toggle expand focused row</td></tr>
+      <tr><td>x</td><td>Toggle checkbox on focused row</td></tr>
+      <tr><td>Esc</td><td>Close expanded row / overlay</td></tr>
+      <tr><td>?</td><td>Toggle this overlay</td></tr>
+    </table>
+    <div style="margin-top:16px;text-align:right">
+      <button id="closeShortcuts">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toastContainer"></div>
+
+<script>
+// All user-supplied strings are rendered via textContent (safe DOM API).
+
+const API = '';
+const state = {
+  cluster: '',
+  view: '',
+  page: 1,
+  perPage: parseInt(localStorage.getItem('perPage')) || 50,
+  selected: new Set(),
+  expandedRow: null,
+  clusters: [],
+  emails: [],
+  totalEmails: 0,
+  totalPages: 0,
+  domains: [],
+  allDomains: [],
+  sort: 'date',
+  sortDir: 'desc',
+  senderView: false,
+  senderGroupBy: 'domain',
+  senders: [],
+  expandedSender: null,
+  focusedRow: -1,
+  compact: localStorage.getItem('compact') === '1',
+  sessionStart: Date.now(),
+  decisionsPerMinute: [],
+  senderPage: 1,
+  senderPerPage: 50,
+};
+
+// --- Fetch helpers ---
+async function api(path, opts = {}) {
+  opts.cache = 'no-store';
+  const r = await fetch(API + path, opts);
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    console.error('API error:', r.status, path, text);
+    throw new Error('API ' + r.status + ': ' + path);
+  }
+  return r.json();
+}
+async function apiPost(path, body) {
+  return api(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+}
+
+// --- Safe DOM helpers ---
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'className') node.className = v;
+      else if (k === 'textContent') node.textContent = v;
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k.startsWith('data-')) node.setAttribute(k, v);
+      else node.setAttribute(k, v);
+    }
+  }
+  if (children) {
+    for (const child of Array.isArray(children) ? children : [children]) {
+      if (typeof child === 'string') node.appendChild(document.createTextNode(child));
+      else if (child) node.appendChild(child);
+    }
+  }
+  return node;
+}
+
+function formatDate(ts) {
+  if (!ts) return '\u2014';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function tierLabel(tier) {
+  return { trash: 'Delete', keep_active: 'Active', keep_historical: 'Historical', review: 'Review' }[tier] || tier;
+}
+
+// --- Loading bar ---
+function showLoading() { document.getElementById('loadingBar').classList.add('active'); }
+function hideLoading() { document.getElementById('loadingBar').classList.remove('active'); }
+
+// --- Toast system ---
+function showToast(message, opts = {}) {
+  const container = document.getElementById('toastContainer');
+  const type = opts.type || 'info';
+  const duration = opts.duration || 5000;
+
+  // Max 3 visible
+  while (container.children.length >= 3) {
+    container.firstChild.remove();
+  }
+
+  const toast = el('div', { className: `toast toast-${type}` });
+  toast.appendChild(el('span', { className: 'toast-msg', textContent: message }));
+
+  if (opts.undo) {
+    const undoBtn = el('button', { className: 'toast-undo', textContent: 'Undo' });
+    undoBtn.addEventListener('click', () => {
+      opts.undo();
+      toast.remove();
+    });
+    toast.appendChild(undoBtn);
+  }
+
+  const closeBtn = el('button', { className: 'toast-close', textContent: '\u00d7' });
+  closeBtn.addEventListener('click', () => toast.remove());
+  toast.appendChild(closeBtn);
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.classList.add('fade-out');
+      setTimeout(() => toast.remove(), 200);
+    }
+  }, duration);
+}
+
+// --- Render clusters using safe DOM ---
+function renderClusters() {
+  const list = document.getElementById('clusterList');
+  list.replaceChildren();
+
+  const searchTerm = (document.getElementById('clusterSearch').value || '').toLowerCase();
+
+  for (const c of state.clusters) {
+    if (searchTerm && !c.label.toLowerCase().includes(searchTerm)) continue;
+
+    const allDone = c.decided_count >= c.count;
+    const partial = c.decided_count > 0 && !allDone;
+
+    const statusCls = allDone ? 'done' : partial ? 'partial' : '';
+    const active = state.cluster === c.label ? 'active' : '';
+    const senders = c.top_senders.slice(0, 2).map(s => s.sender.split('@')[0]).join(', ');
+
+    const card = el('div', { className: `cluster-card ${statusCls} ${active}`.trim(), 'data-cluster': c.label });
+
+    // Label row with badge
+    const labelDiv = el('div', { className: 'label' });
+    labelDiv.appendChild(document.createTextNode(c.label + ' '));
+    if (c.decision) {
+      const badgeLabel = c.decision === 'approve' ? 'delete all' : c.decision === 'skip' ? 'keep all' : c.decision;
+      labelDiv.appendChild(el('span', { className: `badge ${c.decision}`, textContent: badgeLabel }));
+    } else if (allDone) {
+      labelDiv.appendChild(el('span', { className: 'badge skip', textContent: 'done' }));
+    }
+    card.appendChild(labelDiv);
+
+    // Count + confidence dot + range
+    const metaDiv = el('div', { className: 'meta' });
+    metaDiv.appendChild(el('span', { className: 'count', textContent: c.count.toLocaleString() }));
+
+    // Confidence dot
+    const avgConf = c.confidence_avg;
+    let dotColor = 'var(--warning)';
+    if (avgConf < 0.4) dotColor = 'var(--safe)';
+    else if (avgConf > 0.7) dotColor = 'var(--destructive)';
+    metaDiv.appendChild(el('span', { className: 'conf-dot', style: `background:${dotColor}` }));
+    metaDiv.appendChild(el('span', { textContent: c.confidence_min.toFixed(2) + '\u2013' + c.confidence_max.toFixed(2) }));
+    card.appendChild(metaDiv);
+
+    if (senders) {
+      card.appendChild(el('div', { className: 'meta', textContent: senders }));
+    }
+
+    // Progress bar showing trash/keep breakdown
+    if (c.decided_count > 0) {
+      const progressBar = el('div', { className: 'cluster-progress' });
+      const trashPct = (c.individual_trash / c.count * 100);
+      const keepPct = (c.individual_keep / c.count * 100);
+      if (c.decision === 'approve') {
+        progressBar.appendChild(el('div', { className: 'bar-trash', style: 'width:100%' }));
+      } else if (c.decision === 'skip') {
+        progressBar.appendChild(el('div', { className: 'bar-keep', style: 'width:100%' }));
+      } else {
+        progressBar.appendChild(el('div', { className: 'bar-trash', style: 'width:' + trashPct + '%' }));
+        progressBar.appendChild(el('div', { className: 'bar-keep', style: 'width:' + keepPct + '%' }));
+      }
+      card.appendChild(progressBar);
+
+      if (!c.decision) {
+        const remaining = c.count - c.decided_count;
+        const txt = c.decided_count + '/' + c.count + ' decided' + (remaining > 0 ? ', ' + remaining + ' left' : '');
+        card.appendChild(el('div', { className: 'progress-text', textContent: txt }));
+      }
+    }
+
+    card.addEventListener('click', () => {
+      state.cluster = c.label;
+      state.page = 1;
+      state.selected.clear();
+      document.querySelectorAll('.cluster-card').forEach(e => e.classList.remove('active'));
+      card.classList.add('active');
+      loadEmails();
+      updateClusterActions();
+    });
+
+    list.appendChild(card);
+  }
+
+  // "All emails" card click
+  const allCard = document.querySelector('.cluster-card[data-cluster=""]');
+  if (allCard && !allCard._bound) {
+    allCard._bound = true;
+    allCard.addEventListener('click', () => {
+      state.cluster = '';
+      state.page = 1;
+      state.selected.clear();
+      document.querySelectorAll('.cluster-card').forEach(e => e.classList.remove('active'));
+      allCard.classList.add('active');
+      loadEmails();
+      updateClusterActions();
+    });
+  }
+}
+
+// --- Render emails using safe DOM ---
+function renderEmails() {
+  const tbody = document.getElementById('emailBody');
+  tbody.replaceChildren();
+
+  if (!state.emails.length) {
+    const emptyDiv = el('tr', {}, [el('td', { colspan: '7' }, [createEmptyState()])]);
+    tbody.appendChild(emptyDiv);
+    return;
+  }
+
+  state.emails.forEach((e, idx) => {
+    const decClass = e.decision === 'approve' ? 'decided-trash' : e.decision === 'skip' ? 'decided-keep' : '';
+    const focusClass = idx === state.focusedRow ? ' focused' : '';
+    const tr = el('tr', { className: (decClass + focusClass).trim(), 'data-mid': String(e.message_id), 'data-idx': String(idx) });
+
+    // Checkbox
+    const cb = el('input', { type: 'checkbox', 'data-mid': String(e.message_id) });
+    if (state.selected.has(e.message_id)) cb.checked = true;
+    cb.addEventListener('change', () => {
+      if (cb.checked) state.selected.add(e.message_id); else state.selected.delete(e.message_id);
+      updateBulkBar();
+    });
+    tr.appendChild(el('td', { className: 'cb' }, [cb]));
+
+    // Sender
+    tr.appendChild(el('td', { className: 'sender', title: e.sender, textContent: e.sender }));
+
+    // Subject
+    tr.appendChild(el('td', { className: 'subject', title: e.subject, textContent: e.subject }));
+
+    // Tier
+    tr.appendChild(el('td', {}, [el('span', { className: 'tier-' + e.tier, textContent: tierLabel(e.tier) })]));
+
+    // Confidence
+    tr.appendChild(el('td', { className: 'conf', textContent: e.confidence.toFixed(3) }));
+
+    // Date
+    tr.appendChild(el('td', { className: 'date', textContent: formatDate(e.date) }));
+
+    // Decision — blank unless user has made a decision
+    const statusTd = el('td');
+    if (e.decision) {
+      const newLabel = e.decision === 'approve' ? 'delete' : 'keep';
+      const newCls = e.decision === 'approve' ? 'badge approve' : 'badge skip';
+      statusTd.appendChild(el('span', { className: newCls, textContent: newLabel }));
+      statusTd.appendChild(document.createTextNode(' '));
+      const undoBtn = el('button', { className: 'undo', textContent: 'undo' });
+      undoBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        await apiPost('/api/undo', { message_ids: [e.message_id] });
+        showToast('Decision undone', { type: 'info' });
+        await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+      });
+      statusTd.appendChild(undoBtn);
+    }
+    tr.appendChild(statusTd);
+
+    // Row click to expand
+    tr.addEventListener('click', (ev) => {
+      if (ev.target.type === 'checkbox' || ev.target.tagName === 'BUTTON') return;
+      toggleExpand(e.message_id, tr);
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  updateBulkBar();
+}
+
+function createEmptyState() {
+  const div = el('div', { className: 'empty-state' });
+  const hasFilters = document.getElementById('searchInput').value ||
+    document.getElementById('domainFilter').value ||
+    document.getElementById('tierFilter').value ||
+    parseFloat(document.getElementById('confMin').value) > 0 ||
+    parseFloat(document.getElementById('confMax').value) < 1 ||
+    state.view;
+
+  if (hasFilters) {
+    div.appendChild(el('div', { className: 'empty-title', textContent: 'No emails match your filters' }));
+    const clearBtn = el('button', { textContent: 'Clear filters' });
+    clearBtn.addEventListener('click', () => document.getElementById('clearFilters').click());
+    div.appendChild(clearBtn);
+  } else {
+    div.appendChild(el('div', { className: 'empty-title', textContent: 'No emails loaded' }));
+  }
+  return div;
+}
+
+async function toggleExpand(mid, tr) {
+  const existing = document.querySelector('.expanded-row');
+  if (existing) {
+    const existingMid = existing.dataset.mid;
+    existing.remove();
+    if (existingMid === String(mid)) { state.expandedRow = null; return; }
+  }
+
+  state.expandedRow = mid;
+  const data = await api(`/api/email/${mid}/body`);
+  const email = state.emails.find(e => e.message_id === mid);
+
+  const newRow = el('tr', { className: 'expanded-row expanding', 'data-mid': String(mid) });
+  const td = el('td', { colspan: '7' });
+
+  const snippet = el('div', { className: 'body-snippet' });
+  if (data.body) {
+    snippet.textContent = data.body;
+    if (data.source) {
+      const srcLabel = data.source === 'summary' ? 'Apple Intelligence summary' : '.emlx body';
+      snippet.appendChild(el('span', { className: 'body-source', textContent: srcLabel }));
+    }
+  } else {
+    snippet.appendChild(el('em', { textContent: 'No body or summary available for this email' }));
+  }
+  td.appendChild(snippet);
+
+  const info = el('div', { className: 'signal-info' });
+  const parts = [];
+  if (data.signals) parts.push('Signals: ' + data.signals);
+  if (data.content_score != null) parts.push('Content score: ' + data.content_score.toFixed(3));
+  if (data.cluster_label) parts.push('Cluster: ' + data.cluster_label);
+  info.textContent = parts.join(' | ');
+  td.appendChild(info);
+
+  // Inline action bar
+  const actionBar = el('div', { className: 'expand-actions' });
+  if (email && email.decision) {
+    const decLabel = email.decision === 'approve' ? 'delete' : 'keep';
+    actionBar.appendChild(el('span', { className: 'current-decision', textContent: 'Current decision: ' + decLabel }));
+    const undoBtn = el('button', { className: 'undo', textContent: 'Undo' });
+    undoBtn.addEventListener('click', async () => {
+      await apiPost('/api/undo', { message_ids: [mid] });
+      showToast('Decision undone', { type: 'info' });
+      email.decision = null;
+      updateRowDecision(tr, email);
+      updateExpandedActions(actionBar, mid, email, tr);
+      loadClusters();
+      updateHeader();
+    });
+    actionBar.appendChild(undoBtn);
+  } else {
+    buildExpandActions(actionBar, mid, email, tr);
+  }
+  td.appendChild(actionBar);
+
+  newRow.appendChild(td);
+  tr.after(newRow);
+
+  // Trigger expand animation
+  requestAnimationFrame(() => {
+    newRow.classList.remove('expanding');
+    newRow.classList.add('expanded');
+  });
+}
+
+function updateRowDecision(tr, email) {
+  // Update the row's class
+  tr.className = email.decision === 'approve' ? 'decided-trash' :
+                 email.decision === 'skip' ? 'decided-keep' : '';
+  // Update the Decision cell (last <td>)
+  const cells = tr.querySelectorAll('td');
+  const statusTd = cells[cells.length - 1];
+  statusTd.replaceChildren();
+  if (email.decision) {
+    const newLabel = email.decision === 'approve' ? 'delete' : 'keep';
+    const newCls = email.decision === 'approve' ? 'badge approve' : 'badge skip';
+    statusTd.appendChild(el('span', { className: newCls, textContent: newLabel }));
+    statusTd.appendChild(document.createTextNode(' '));
+    const undoBtn = el('button', { className: 'undo', textContent: 'undo' });
+    undoBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      await apiPost('/api/undo', { message_ids: [email.message_id] });
+      showToast('Decision undone', { type: 'info' });
+      email.decision = null;
+      updateRowDecision(tr, email);
+      loadClusters();
+      updateHeader();
+    });
+    statusTd.appendChild(undoBtn);
+  }
+}
+
+function updateExpandedActions(actionBar, mid, email, tr) {
+  actionBar.replaceChildren();
+  if (email.decision) {
+    const decLabel = email.decision === 'approve' ? 'delete' : 'keep';
+    actionBar.appendChild(el('span', { className: 'current-decision', textContent: 'Current decision: ' + decLabel }));
+    const undoBtn = el('button', { className: 'undo', textContent: 'Undo' });
+    undoBtn.addEventListener('click', async () => {
+      await apiPost('/api/undo', { message_ids: [mid] });
+      showToast('Decision undone', { type: 'info' });
+      email.decision = null;
+      updateRowDecision(tr, email);
+      updateExpandedActions(actionBar, mid, email, tr);
+      loadClusters();
+      updateHeader();
+    });
+    actionBar.appendChild(undoBtn);
+  } else {
+    buildExpandActions(actionBar, mid, email, tr);
+  }
+}
+
+function buildExpandActions(actionBar, mid, email, tr) {
+  const delBtn = el('button', { className: 'danger', textContent: 'Delete' });
+  delBtn.addEventListener('click', async () => {
+    try {
+      const resp = await apiPost('/api/decide', { message_ids: [mid], action: 'trash' });
+      console.log('[decide]', mid, resp);
+    } catch (err) {
+      showToast('Failed to save decision: ' + err.message, { type: 'destructive' });
+      return;
+    }
+    email.decision = 'approve';
+    updateRowDecision(tr, email);
+    updateExpandedActions(actionBar, mid, email, tr);
+    showToast('Email marked for deletion', { type: 'destructive', undo: async () => {
+      await apiPost('/api/undo', { message_ids: [mid] });
+      email.decision = null;
+      updateRowDecision(tr, email);
+      updateExpandedActions(actionBar, mid, email, tr);
+      loadClusters();
+      updateHeader();
+    }});
+    loadClusters();
+    updateHeader();
+  });
+  const keepBtn = el('button', { className: 'safe', textContent: 'Keep' });
+  keepBtn.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/decide', { message_ids: [mid], action: 'keep' });
+    } catch (err) {
+      showToast('Failed to save decision: ' + err.message, { type: 'destructive' });
+      return;
+    }
+    email.decision = 'skip';
+    updateRowDecision(tr, email);
+    updateExpandedActions(actionBar, mid, email, tr);
+    showToast('Email marked to keep', { type: 'success', undo: async () => {
+      await apiPost('/api/undo', { message_ids: [mid] });
+      email.decision = null;
+      updateRowDecision(tr, email);
+      updateExpandedActions(actionBar, mid, email, tr);
+      loadClusters();
+      updateHeader();
+    }});
+    loadClusters();
+    updateHeader();
+  });
+  actionBar.appendChild(delBtn);
+  actionBar.appendChild(keepBtn);
+}
+
+function renderPagination() {
+  const info = document.getElementById('pageInfo');
+  const btns = document.getElementById('pageButtons');
+  if (state.totalEmails === 0) {
+    info.textContent = '0 emails';
+    btns.replaceChildren();
+    return;
+  }
+  const start = (state.page - 1) * state.perPage + 1;
+  const end = Math.min(state.page * state.perPage, state.totalEmails);
+  info.textContent = `${start}\u2013${end} of ${state.totalEmails.toLocaleString()}`;
+
+  btns.replaceChildren();
+  const maxPages = Math.min(state.totalPages, 10);
+  let startPage = Math.max(1, state.page - 4);
+  const endPage = Math.min(state.totalPages, startPage + maxPages - 1);
+  if (endPage - startPage < maxPages - 1) startPage = Math.max(1, endPage - maxPages + 1);
+
+  if (state.page > 1) {
+    const prev = el('button', { textContent: '\u2039' });
+    prev.addEventListener('click', () => { state.page -= 1; loadEmails(); });
+    btns.appendChild(prev);
+  }
+  for (let i = startPage; i <= endPage; i++) {
+    const cls = i === state.page ? 'active-page' : '';
+    const btn = el('button', { className: cls, textContent: String(i) });
+    const pg = i;
+    btn.addEventListener('click', () => { state.page = pg; loadEmails(); });
+    btns.appendChild(btn);
+  }
+  if (state.page < state.totalPages) {
+    const next = el('button', { textContent: '\u203A' });
+    next.addEventListener('click', () => { state.page += 1; loadEmails(); });
+    btns.appendChild(next);
+  }
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const count = state.selected.size;
+  bar.classList.toggle('visible', count > 0);
+  document.getElementById('selectedCount').textContent = String(count);
+  document.getElementById('emailTableWrap').classList.toggle('has-bulk-bar', count > 0);
+}
+
+function updateClusterActions() {
+  const panel = document.getElementById('clusterActions');
+  if (!state.cluster) { panel.classList.remove('visible'); return; }
+  panel.classList.add('visible');
+  document.getElementById('clusterActionName').textContent = state.cluster;
+
+  const cluster = state.clusters.find(c => c.label === state.cluster);
+  const hint = document.getElementById('clusterHint');
+  if (cluster) {
+    hint.textContent = cluster.count.toLocaleString() + ' emails \u2014 nothing happens until you run execute';
+  } else {
+    hint.textContent = '';
+  }
+}
+
+async function updateHeader() {
+  const data = await api('/api/session');
+  state.sessionData = data;
+
+  // Email-based progress
+  const effectiveDecided = data.effective_decided || 0;
+  const totalEmails = data.total_emails || 0;
+  const effectiveTrash = data.effective_trash || 0;
+  const effectiveKeep = data.effective_keep || 0;
+  const pct = totalEmails > 0 ? (effectiveDecided / totalEmails * 100) : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const statsEl = document.getElementById('headerStats');
+  statsEl.replaceChildren();
+  statsEl.appendChild(el('span', { textContent: effectiveDecided.toLocaleString() }));
+  statsEl.appendChild(document.createTextNode(' / ' + totalEmails.toLocaleString() + ' decided'));
+  statsEl.appendChild(document.createTextNode(' \u00b7 '));
+  statsEl.appendChild(el('span', { textContent: effectiveTrash.toLocaleString() }));
+  statsEl.appendChild(document.createTextNode(' trash, '));
+  statsEl.appendChild(el('span', { textContent: effectiveKeep.toLocaleString() }));
+  statsEl.appendChild(document.createTextNode(' keep'));
+  statsEl.appendChild(document.createTextNode(' \u00b7 '));
+  statsEl.appendChild(document.createTextNode(data.reviewed_clusters + '/' + data.total_clusters + ' clusters'));
+
+  // Show/hide "Keep all remaining" button
+  const remaining = totalEmails - effectiveDecided;
+  const keepBtn = document.getElementById('keepRemainingBtn');
+  keepBtn.style.display = remaining > 0 ? '' : 'none';
+  keepBtn.textContent = 'Keep all remaining (' + remaining.toLocaleString() + ')';
+
+  renderDecisionsSummary(data);
+}
+
+function renderDecisionsSummary(data) {
+  const panel = document.getElementById('decisionsSummary');
+  panel.replaceChildren();
+
+  const effectiveDecided = data.effective_decided || 0;
+  const effectiveTrash = data.effective_trash || 0;
+  const effectiveKeep = data.effective_keep || 0;
+
+  const line = (label, value, cls) => {
+    const row = el('div', { className: 'line' });
+    row.appendChild(el('span', { textContent: label }));
+    row.appendChild(el('span', { className: cls || 'val', textContent: String(value) }));
+    panel.appendChild(row);
+  };
+
+  line('Marked for deletion', effectiveTrash.toLocaleString(), 'val-red');
+  line('Marked to keep', effectiveKeep.toLocaleString(), 'val-green');
+  line('Total decided', effectiveDecided.toLocaleString() + ' / ' + (data.total_emails || 0).toLocaleString(), 'val');
+  line('Clusters decided', data.reviewed_clusters + '/' + data.total_clusters, 'val');
+
+  const note = el('div', { className: 'note' });
+  note.appendChild(document.createTextNode('Decisions saved automatically. Nothing deleted until you quit (Ctrl+C) and run:'));
+  note.appendChild(el('br'));
+  note.appendChild(el('code', { textContent: 'uv run python -m icloud_cleanup execute' }));
+  panel.appendChild(note);
+}
+
+// --- Quick stats bar ---
+function updateQuickStats(emailData) {
+  const bar = document.getElementById('quickStats');
+  bar.replaceChildren();
+  if (!emailData) return;
+
+  const parts = [];
+  if (emailData.avg_confidence != null) {
+    parts.push('Avg conf: ');
+    bar.appendChild(el('span', { textContent: emailData.avg_confidence.toFixed(2) }));
+  }
+  if (emailData.top_domain) {
+    bar.appendChild(document.createTextNode(' \u00b7 Top domain: '));
+    bar.appendChild(el('span', { textContent: emailData.top_domain }));
+    bar.appendChild(document.createTextNode(' (' + emailData.top_domain_count + ')'));
+  }
+
+  // Estimated time remaining
+  const sessionMin = (Date.now() - state.sessionStart) / 60000;
+  if (state.sessionData && sessionMin > 1) {
+    const decided = state.sessionData.effective_decided || 0;
+    const total = state.sessionData.total_emails || 0;
+    const remaining = total - decided;
+    if (decided > 0 && remaining > 0) {
+      const rate = decided / sessionMin;
+      const estMin = Math.round(remaining / rate);
+      if (estMin > 0) {
+        const estLabel = estMin >= 60 ? Math.floor(estMin / 60) + 'h ' + (estMin % 60) + 'm' : estMin + 'm';
+        bar.appendChild(document.createTextNode(' \u00b7 ~' + estLabel + ' remaining'));
+      }
+    }
+  }
+}
+
+// --- Session timer ---
+function updateSessionTimer() {
+  const elapsed = Math.floor((Date.now() - state.sessionStart) / 60000);
+  const label = elapsed >= 60 ? Math.floor(elapsed / 60) + 'h ' + (elapsed % 60) + 'm' : elapsed + 'm';
+  document.getElementById('sessionTimer').textContent = label;
+}
+
+// --- Data loading ---
+async function loadClusters() {
+  state.clusters = await api('/api/clusters');
+  document.getElementById('totalCount').textContent = state.clusters.reduce((s, c) => s + c.count, 0).toLocaleString();
+  renderClusters();
+}
+
+async function loadEmails() {
+  showLoading();
+  state.focusedRow = -1;
+  const params = new URLSearchParams();
+  if (state.cluster) params.set('cluster', state.cluster);
+  if (state.view) params.set('decision', state.view);
+  params.set('page', state.page);
+  params.set('per_page', state.perPage);
+  if (state.sort) params.set('sort_by', state.sort);
+  params.set('sort_dir', state.sortDir);
+
+  const search = document.getElementById('searchInput').value;
+  if (search) params.set('q', search);
+  const domain = document.getElementById('domainFilter').value;
+  if (domain) params.set('sender', domain);
+  const tier = document.getElementById('tierFilter').value;
+  if (tier) params.set('tier', tier);
+  const confMin = parseFloat(document.getElementById('confMin').value);
+  if (confMin > 0) params.set('confidence_min', confMin);
+  const confMax = parseFloat(document.getElementById('confMax').value);
+  if (confMax < 1) params.set('confidence_max', confMax);
+
+  const data = await api('/api/emails?' + params);
+  console.log('[loadEmails]', params.toString(), 'got', data.emails.length, 'of', data.total);
+  state.emails = data.emails;
+  state.totalEmails = data.total;
+  state.totalPages = data.pages;
+  state.domains = data.domains;
+
+  // Store full domain list on first load
+  if (!state.allDomains.length && data.domains.length) {
+    state.allDomains = data.domains;
+  }
+
+  // Update domain dropdown from stable list unless filtering
+  const sel = document.getElementById('domainFilter');
+  const current = sel.value;
+  const domainSource = state.cluster || search ? data.domains : state.allDomains;
+  sel.replaceChildren();
+  sel.appendChild(el('option', { value: '', textContent: 'All domains' }));
+  for (const d of domainSource) {
+    const opt = el('option', { value: d.domain, textContent: d.domain + ' (' + d.count + ')' });
+    if (d.domain === current) opt.selected = true;
+    sel.appendChild(opt);
+  }
+
+  renderEmails();
+  renderPagination();
+  hideLoading();
+
+  // Update tab counts
+  if (data.decision_counts) {
+    const dc = data.decision_counts;
+    document.getElementById('tabAll').textContent = (dc.pending + dc.approve + dc.skip).toLocaleString();
+    document.getElementById('tabPending').textContent = dc.pending.toLocaleString();
+    document.getElementById('tabDelete').textContent = dc.approve.toLocaleString();
+    document.getElementById('tabKeep').textContent = dc.skip.toLocaleString();
+  }
+
+  updateQuickStats(data);
+}
+
+// --- Actions ---
+async function bulkDecide(action) {
+  if (!state.selected.size) return;
+  const count = state.selected.size;
+  const ids = [...state.selected];
+  await apiPost('/api/decide', { message_ids: ids, action });
+  const label = action === 'trash' ? 'marked for deletion' : 'marked to keep';
+  showToast(`${count} emails ${label}`, {
+    type: action === 'trash' ? 'destructive' : 'success',
+    undo: async () => {
+      await apiPost('/api/undo', { message_ids: ids });
+      await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+    }
+  });
+  state.selected.clear();
+  await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+}
+
+async function clusterDecide(action) {
+  if (!state.cluster) return;
+  const cluster = state.clusters.find(c => c.label === state.cluster);
+  const count = cluster ? cluster.count : 0;
+  const clusterLabel = state.cluster;
+  await apiPost('/api/decide-cluster', { cluster_label: clusterLabel, action });
+  const label = action === 'approve' ? 'marked for deletion' : 'marked to keep';
+  showToast(`Cluster '${clusterLabel}' \u2014 all ${count} emails ${label}`, {
+    type: action === 'approve' ? 'destructive' : 'success',
+    undo: async () => {
+      await apiPost('/api/undo', { cluster_label: clusterLabel });
+      await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+    }
+  });
+  await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+}
+
+// --- Keyboard shortcuts ---
+function handleKeyboard(ev) {
+  const tag = ev.target.tagName;
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+  const overlay = document.getElementById('shortcutsOverlay');
+
+  switch (ev.key) {
+    case '?':
+      ev.preventDefault();
+      overlay.classList.toggle('hidden');
+      break;
+    case 'Escape':
+      if (!overlay.classList.contains('hidden')) {
+        overlay.classList.add('hidden');
+      } else {
+        const expanded = document.querySelector('.expanded-row');
+        if (expanded) { expanded.remove(); state.expandedRow = null; }
+      }
+      break;
+    case 'ArrowDown':
+      ev.preventDefault();
+      if (state.emails.length) {
+        state.focusedRow = Math.min(state.focusedRow + 1, state.emails.length - 1);
+        updateFocusedRow();
+      }
+      break;
+    case 'ArrowUp':
+      ev.preventDefault();
+      if (state.emails.length) {
+        state.focusedRow = Math.max(state.focusedRow - 1, 0);
+        updateFocusedRow();
+      }
+      break;
+    case 'd':
+      if (state.focusedRow >= 0 && state.focusedRow < state.emails.length) {
+        const e = state.emails[state.focusedRow];
+        apiPost('/api/decide', { message_ids: [e.message_id], action: 'trash' }).then(() => {
+          showToast('Email marked for deletion', { type: 'destructive', undo: async () => {
+            await apiPost('/api/undo', { message_ids: [e.message_id] });
+            await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+          }});
+          Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+        });
+      }
+      break;
+    case 'k':
+      if (state.focusedRow >= 0 && state.focusedRow < state.emails.length) {
+        const e = state.emails[state.focusedRow];
+        apiPost('/api/decide', { message_ids: [e.message_id], action: 'keep' }).then(() => {
+          showToast('Email marked to keep', { type: 'success', undo: async () => {
+            await apiPost('/api/undo', { message_ids: [e.message_id] });
+            await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+          }});
+          Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+        });
+      }
+      break;
+    case 'u':
+      if (state.focusedRow >= 0 && state.focusedRow < state.emails.length) {
+        const e = state.emails[state.focusedRow];
+        if (e.decision) {
+          apiPost('/api/undo', { message_ids: [e.message_id] }).then(() => {
+            showToast('Decision undone', { type: 'info' });
+            Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+          });
+        }
+      }
+      break;
+    case 'Enter':
+    case ' ':
+      if (state.focusedRow >= 0 && state.focusedRow < state.emails.length) {
+        ev.preventDefault();
+        const e = state.emails[state.focusedRow];
+        const row = document.querySelector(`tr[data-idx="${state.focusedRow}"]`);
+        if (row) toggleExpand(e.message_id, row);
+      }
+      break;
+    case 'x':
+      if (state.focusedRow >= 0 && state.focusedRow < state.emails.length) {
+        const e = state.emails[state.focusedRow];
+        if (state.selected.has(e.message_id)) {
+          state.selected.delete(e.message_id);
+        } else {
+          state.selected.add(e.message_id);
+        }
+        renderEmails();
+        updateBulkBar();
+      }
+      break;
+  }
+}
+
+function updateFocusedRow() {
+  document.querySelectorAll('#emailBody > tr').forEach(tr => tr.classList.remove('focused'));
+  const row = document.querySelector(`tr[data-idx="${state.focusedRow}"]`);
+  if (row) {
+    row.classList.add('focused');
+    row.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+document.addEventListener('keydown', handleKeyboard);
+
+// --- Event bindings ---
+let searchTimeout;
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => { state.page = 1; loadEmails(); }, 300);
+});
+document.getElementById('domainFilter').addEventListener('change', () => { state.page = 1; loadEmails(); });
+document.getElementById('tierFilter').addEventListener('change', () => { state.page = 1; loadEmails(); });
+
+document.getElementById('confMin').addEventListener('input', (e) => {
+  document.getElementById('confMinLabel').textContent = parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('confMax').addEventListener('input', (e) => {
+  document.getElementById('confMaxLabel').textContent = parseFloat(e.target.value).toFixed(2);
+});
+document.getElementById('confMin').addEventListener('change', () => { state.page = 1; loadEmails(); });
+document.getElementById('confMax').addEventListener('change', () => { state.page = 1; loadEmails(); });
+
+document.getElementById('clearFilters').addEventListener('click', () => {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('domainFilter').value = '';
+  document.getElementById('tierFilter').value = '';
+  document.getElementById('confMin').value = 0;
+  document.getElementById('confMax').value = 1;
+  document.getElementById('confMinLabel').textContent = '0';
+  document.getElementById('confMaxLabel').textContent = '1';
+  state.view = '';
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.view-tab[data-view=""]').classList.add('active');
+  state.page = 1;
+  loadEmails();
+});
+
+document.getElementById('selectAll').addEventListener('change', (e) => {
+  const checked = e.target.checked;
+  state.emails.forEach(em => { if (checked) state.selected.add(em.message_id); else state.selected.delete(em.message_id); });
+  document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  updateBulkBar();
+});
+
+document.getElementById('btnTrashSelected').addEventListener('click', () => bulkDecide('trash'));
+document.getElementById('btnKeepSelected').addEventListener('click', () => bulkDecide('keep'));
+document.getElementById('btnDeselectAll').addEventListener('click', () => {
+  state.selected.clear();
+  document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => cb.checked = false);
+  updateBulkBar();
+});
+document.getElementById('btnSelectAllDomain').addEventListener('click', () => {
+  const domain = document.getElementById('domainFilter').value;
+  if (!domain) return;
+  state.emails.forEach(e => { if (e.domain === domain) state.selected.add(e.message_id); });
+  document.querySelectorAll('#emailBody input[type="checkbox"]').forEach(cb => {
+    const mid = cb.getAttribute('data-mid');
+    const em = state.emails.find(e => e.message_id === mid);
+    if (em && em.domain === domain) cb.checked = true;
+  });
+  updateBulkBar();
+});
+
+document.getElementById('pageSizeSelect').addEventListener('change', (e) => {
+  state.perPage = parseInt(e.target.value);
+  state.page = 1;
+  localStorage.setItem('perPage', state.perPage);
+  loadEmails();
+});
+
+document.getElementById('btnClusterTrash').addEventListener('click', () => clusterDecide('approve'));
+document.getElementById('btnClusterKeep').addEventListener('click', () => clusterDecide('reject'));
+document.getElementById('btnClusterReset').addEventListener('click', async () => {
+  if (!state.cluster) return;
+  await apiPost('/api/undo', { cluster_label: state.cluster });
+  showToast('Cluster decisions reset', { type: 'info' });
+  await Promise.all([loadClusters(), loadEmails(), updateHeader()]);
+});
+
+// View tabs
+document.querySelectorAll('#viewTabs .view-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (state.senderView) return;
+    state.view = tab.dataset.view;
+    state.page = 1;
+    state.selected.clear();
+    document.querySelectorAll('#viewTabs .view-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    loadEmails();
+  });
+});
+
+// Guide dismiss/toggle
+const guideEl = document.getElementById('guide');
+const guideToggleBtn = document.getElementById('guideToggle');
+if (localStorage.getItem('guide_dismissed')) {
+  guideEl.classList.add('hidden');
+  guideToggleBtn.style.display = '';
+}
+document.getElementById('guideClose').addEventListener('click', () => {
+  guideEl.classList.add('hidden');
+  guideToggleBtn.style.display = '';
+  localStorage.setItem('guide_dismissed', '1');
+});
+guideToggleBtn.addEventListener('click', () => {
+  guideEl.classList.remove('hidden');
+  guideToggleBtn.style.display = 'none';
+});
+
+// Shortcuts overlay
+document.getElementById('closeShortcuts').addEventListener('click', () => {
+  document.getElementById('shortcutsOverlay').classList.add('hidden');
+});
+document.getElementById('shortcutsOverlay').addEventListener('click', (ev) => {
+  if (ev.target === ev.currentTarget) {
+    ev.currentTarget.classList.add('hidden');
+  }
+});
+
+// --- Sortable headers ---
+function updateSortIndicators() {
+  document.querySelectorAll('.sort-indicator').forEach(s => s.remove());
+  const active = document.querySelector(`th[data-sort="${state.sort}"]`);
+  if (active) {
+    const arrow = state.sortDir === 'asc' ? '\u25B2' : '\u25BC';
+    active.appendChild(el('span', { className: 'sort-indicator', id: 'sort-' + state.sort, textContent: arrow }));
+  }
+}
+
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.dataset.sort;
+    if (state.sort === field) {
+      state.sortDir = state.sortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      state.sort = field;
+      state.sortDir = field === 'date' || field === 'confidence' ? 'desc' : 'asc';
+    }
+    state.page = 1;
+    updateSortIndicators();
+    loadEmails();
+  });
+});
+
+// --- Compact mode ---
+function applyCompact() {
+  document.getElementById('emailTableWrap').classList.toggle('compact', state.compact);
+  document.getElementById('compactToggle').classList.toggle('active', state.compact);
+}
+document.getElementById('compactToggle').addEventListener('click', () => {
+  state.compact = !state.compact;
+  localStorage.setItem('compact', state.compact ? '1' : '0');
+  applyCompact();
+});
+applyCompact();
+
+// --- Sender view ---
+function toggleSenderView(on) {
+  state.senderView = on;
+  document.getElementById('emailTableWrap').style.display = on ? 'none' : '';
+  document.getElementById('senderTableWrap').style.display = on ? '' : 'none';
+  document.getElementById('mainPagination').style.display = on ? 'none' : '';
+  document.getElementById('bulkBar').classList.remove('visible');
+  document.getElementById('senderViewBtn').classList.toggle('active', on);
+
+  // Dim/undim view tabs
+  document.querySelectorAll('#viewTabs .view-tab').forEach(t => {
+    t.classList.toggle('dimmed', on);
+  });
+
+  if (on) {
+    state.senderPage = 1;
+    loadSenders();
+  }
+}
+
+document.getElementById('senderViewBtn').addEventListener('click', () => {
+  toggleSenderView(!state.senderView);
+});
+
+async function loadSenders() {
+  showLoading();
+  const params = new URLSearchParams();
+  params.set('group_by', state.senderGroupBy);
+  if (state.view && !state.senderView) params.set('decision', state.view);
+  const search = document.getElementById('searchInput').value;
+  if (search) params.set('q', search);
+  const tier = document.getElementById('tierFilter').value;
+  if (tier) params.set('tier', tier);
+  const confMin = parseFloat(document.getElementById('confMin').value);
+  if (confMin > 0) params.set('confidence_min', confMin);
+  const confMax = parseFloat(document.getElementById('confMax').value);
+  if (confMax < 1) params.set('confidence_max', confMax);
+
+  const data = await api('/api/senders?' + params);
+  state.senders = data.senders;
+  renderSenders();
+  hideLoading();
+}
+
+function renderSenders() {
+  const tbody = document.getElementById('senderBody');
+  tbody.replaceChildren();
+
+  if (!state.senders.length) {
+    const emptyDiv = el('div', { className: 'empty-state' });
+    emptyDiv.appendChild(el('div', { className: 'empty-title', textContent: 'No senders match filters' }));
+    tbody.appendChild(el('tr', {}, [el('td', { colspan: '8' }, [emptyDiv])]));
+    renderSenderPagination();
+    return;
+  }
+
+  // Client-side pagination
+  const total = state.senders.length;
+  const start = (state.senderPage - 1) * state.senderPerPage;
+  const pageItems = state.senders.slice(start, start + state.senderPerPage);
+
+  for (const s of pageItems) {
+    const tr = el('tr', { className: 'sender-row', 'data-key': s.key });
+
+    tr.appendChild(el('td', { className: 'sender-key', title: s.key, textContent: s.key }));
+    tr.appendChild(el('td', { textContent: String(s.count) }));
+    tr.appendChild(el('td', { textContent: String(s.top_clusters.length) }));
+    tr.appendChild(el('td', { className: 'conf', textContent: s.avg_confidence.toFixed(3) }));
+    tr.appendChild(el('td', { className: 'tier-trash', textContent: String(s.trash_count) }));
+    tr.appendChild(el('td', { className: 'tier-keep_active', textContent: String(s.keep_count) }));
+    tr.appendChild(el('td', { textContent: String(s.pending_count) }));
+
+    const actionsTd = el('td', { className: 'sender-actions' });
+    const delBtn = el('button', { className: 'danger', textContent: 'Delete all' });
+    delBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      await apiPost('/api/decide-sender', { key: s.key, group_by: state.senderGroupBy, action: 'trash' });
+      showToast(`${s.count} emails from ${s.key} marked for deletion`, {
+        type: 'destructive',
+        undo: async () => {
+          // Undo all emails for this sender
+          const senderEmails = await api(`/api/emails?sender=${encodeURIComponent(s.key)}&per_page=200`);
+          const ids = senderEmails.emails.map(e => e.message_id);
+          await apiPost('/api/undo', { message_ids: ids });
+          await Promise.all([loadSenders(), loadClusters(), updateHeader()]);
+        }
+      });
+      await Promise.all([loadSenders(), loadClusters(), updateHeader()]);
+    });
+    const keepBtn = el('button', { className: 'safe', textContent: 'Keep all' });
+    keepBtn.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      await apiPost('/api/decide-sender', { key: s.key, group_by: state.senderGroupBy, action: 'keep' });
+      showToast(`${s.count} emails from ${s.key} marked to keep`, {
+        type: 'success',
+        undo: async () => {
+          const senderEmails = await api(`/api/emails?sender=${encodeURIComponent(s.key)}&per_page=200`);
+          const ids = senderEmails.emails.map(e => e.message_id);
+          await apiPost('/api/undo', { message_ids: ids });
+          await Promise.all([loadSenders(), loadClusters(), updateHeader()]);
+        }
+      });
+      await Promise.all([loadSenders(), loadClusters(), updateHeader()]);
+    });
+    actionsTd.appendChild(delBtn);
+    actionsTd.appendChild(keepBtn);
+    tr.appendChild(actionsTd);
+
+    tr.addEventListener('click', () => toggleSenderExpand(s.key, tr));
+    tbody.appendChild(tr);
+  }
+
+  renderSenderPagination();
+}
+
+function renderSenderPagination() {
+  const total = state.senders.length;
+  const totalPages = Math.ceil(total / state.senderPerPage);
+  const paginationEl = document.getElementById('senderPagination');
+
+  if (totalPages <= 1) {
+    paginationEl.style.display = 'none';
+    return;
+  }
+  paginationEl.style.display = '';
+
+  const info = document.getElementById('senderPageInfo');
+  const start = (state.senderPage - 1) * state.senderPerPage + 1;
+  const end = Math.min(state.senderPage * state.senderPerPage, total);
+  info.textContent = `${start}\u2013${end} of ${total}`;
+
+  const btns = document.getElementById('senderPageButtons');
+  btns.replaceChildren();
+  if (state.senderPage > 1) {
+    const prev = el('button', { textContent: '\u2039' });
+    prev.addEventListener('click', () => { state.senderPage--; renderSenders(); });
+    btns.appendChild(prev);
+  }
+  for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+    const cls = i === state.senderPage ? 'active-page' : '';
+    const btn = el('button', { className: cls, textContent: String(i) });
+    const pg = i;
+    btn.addEventListener('click', () => { state.senderPage = pg; renderSenders(); });
+    btns.appendChild(btn);
+  }
+  if (state.senderPage < totalPages) {
+    const next = el('button', { textContent: '\u203A' });
+    next.addEventListener('click', () => { state.senderPage++; renderSenders(); });
+    btns.appendChild(next);
+  }
+}
+
+async function toggleSenderExpand(key, tr) {
+  const existing = document.querySelector('.sender-expanded');
+  if (existing) {
+    const existingKey = existing.dataset.key;
+    existing.remove();
+    if (existingKey === key) { state.expandedSender = null; return; }
+  }
+  state.expandedSender = key;
+
+  const params = new URLSearchParams();
+  params.set('sender', key);
+  params.set('per_page', '20');
+  const data = await api('/api/emails?' + params);
+
+  const newRow = el('tr', { className: 'sender-expanded', 'data-key': key });
+  const td = el('td', { colspan: '8' });
+  const inner = el('div', { className: 'sender-emails-inner' });
+  const tbl = el('table');
+  for (const e of data.emails) {
+    const r = el('tr');
+    r.appendChild(el('td', { className: 'sender', textContent: e.sender }));
+    r.appendChild(el('td', { className: 'subject', textContent: e.subject }));
+    r.appendChild(el('td', {}, [el('span', { className: 'tier-' + e.tier, textContent: tierLabel(e.tier) })]));
+    r.appendChild(el('td', { className: 'conf', textContent: e.confidence.toFixed(3) }));
+    r.appendChild(el('td', { className: 'date', textContent: formatDate(e.date) }));
+    const decText = e.decision === 'approve' ? 'delete' : e.decision === 'skip' ? 'keep' : '\u2014';
+    r.appendChild(el('td', { textContent: decText }));
+    tbl.appendChild(r);
+  }
+  if (data.total > 20) {
+    inner.appendChild(el('div', { style: 'font-size:11px;color:var(--text2);margin-bottom:6px', textContent: 'Showing 20 of ' + data.total + ' emails' }));
+  }
+  inner.appendChild(tbl);
+  td.appendChild(inner);
+  newRow.appendChild(td);
+  tr.after(newRow);
+}
+
+// Sender group toggle (domain / sender)
+document.querySelectorAll('#senderGroupToggle button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    state.senderGroupBy = btn.dataset.group;
+    document.querySelectorAll('#senderGroupToggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.senderPage = 1;
+    loadSenders();
+  });
+});
+
+// Cluster search
+document.getElementById('clusterSearch').addEventListener('input', () => {
+  renderClusters();
+});
+
+// Keep all remaining
+document.getElementById('keepRemainingBtn').addEventListener('click', async () => {
+  const data = state.sessionData;
+  if (!data) return;
+  const remaining = (data.total_emails || 0) - (data.effective_decided || 0);
+  if (remaining <= 0) return;
+
+  if (!confirm(`Keep all ${remaining.toLocaleString()} remaining undecided emails?`)) return;
+
+  const clusterCount = (data.total_clusters || 0) - (data.reviewed_clusters || 0);
+  if (!confirm(`Confirm: This will mark ${remaining.toLocaleString()} emails as keep across ${clusterCount} clusters. Proceed?`)) return;
+
+  const result = await apiPost('/api/decide-remaining', {});
+  showToast(`${result.decided} emails marked to keep`, { type: 'success' });
+  await Promise.all([loadEmails(), loadClusters(), updateHeader()]);
+});
+
+// Session timer interval
+setInterval(updateSessionTimer, 60000);
+updateSessionTimer();
+
+// Sync page size selector from stored preference
+document.getElementById('pageSizeSelect').value = String(state.perPage);
+
+// Boot
+(async () => {
+  await Promise.all([loadClusters(), loadEmails(), updateHeader()]);
+})();
+</script>
+</body>
+</html>

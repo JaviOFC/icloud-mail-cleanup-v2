@@ -84,6 +84,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Force full reclassification (ignore existing checkpoint)",
     )
     classify_parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Also run content analysis (embeddings + clustering) after classification",
+    )
+    classify_parser.add_argument(
         "--debug-scores",
         metavar="SENDER",
         help="Dump per-signal breakdown for a specific sender address",
@@ -150,6 +155,11 @@ def create_parser() -> argparse.ArgumentParser:
         "--reset",
         action="store_true",
         help="Start fresh, discard existing session",
+    )
+    review_parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch web-based review UI instead of CLI",
     )
     review_parser.set_defaults(func=cmd_review)
 
@@ -282,6 +292,11 @@ def cmd_classify(args: argparse.Namespace) -> None:
 
     finally:
         conn.close()
+
+    # Step 9: Chain into analyze if requested
+    if args.analyze:
+        console.print("\n[bold]Continuing to content analysis...[/bold]\n")
+        cmd_analyze(args)
 
 
 def _extract_body(item: tuple) -> tuple[int, str, str]:
@@ -612,6 +627,18 @@ def cmd_report(args: argparse.Namespace) -> None:
 
 def cmd_review(args: argparse.Namespace) -> None:
     """Execute the review subcommand: interactive review of classified emails."""
+    if args.web:
+        from icloud_cleanup.review import get_session_path
+        from icloud_cleanup.web.server import launch
+
+        session_path = args.session or get_session_path()
+        launch(
+            checkpoint_path=args.checkpoint,
+            session_path=session_path,
+            db_path=args.db,
+        )
+        return
+
     import questionary
 
     from icloud_cleanup.auto_triage import auto_triage
