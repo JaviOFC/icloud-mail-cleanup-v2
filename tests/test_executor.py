@@ -1,4 +1,4 @@
-"""Tests for executor module: AppleScript generation, action log, dry-run, batch execution."""
+"""Tests for executor module: AppleScript generation, action log, batch execution."""
 
 from __future__ import annotations
 
@@ -11,8 +11,11 @@ import pytest
 
 from icloud_cleanup.executor import (
     ActionLog,
+    _parse_batch_results,
     execute_deletions,
     generate_applescript,
+    generate_batch_applescript,
+    generate_batch_restore_script,
     generate_restore_script,
     restore_from_log,
     url_to_applescript_mailbox,
@@ -97,7 +100,7 @@ class TestUrlToApplescriptMailbox:
         assert result == 'mailbox "Sent Messages" of account "iCloud"'
 
 
-# --- AppleScript generation ---
+# --- Single-message AppleScript generation ---
 
 
 class TestGenerateApplescript:
@@ -134,8 +137,6 @@ class TestGenerateApplescript:
             rowid=100,
             source_mailbox='mailbox "INBOX" of account "iCloud"',
         )
-        # "Deleted Messages" is the mailbox name, not the delete command
-        # Check that no line starts with "delete" as an AppleScript command
         lines = [line.strip().lower() for line in script.splitlines()]
         assert not any(line.startswith("delete ") for line in lines)
 
@@ -150,6 +151,135 @@ class TestGenerateRestoreScript:
         assert '"Deleted Messages"' in script
         assert '"INBOX"' in script
         assert "set mailbox of" in script
+
+
+# --- Batch AppleScript generation ---
+
+
+class TestGenerateBatchApplescript:
+    def test_single_message(self):
+        msg = _make_message(rowid=123, message_id=5001)
+        cls = {5001: _make_classification(message_id=5001)}
+        script, rowids = generate_batch_applescript([msg], cls)
+        assert rowids == [123]
+        assert 'tell application "Mail"' in script
+        assert "whose id is 123" in script
+        assert '"OK:123"' in script
+        assert '"MISS:123"' in script
+        assert '"ERR:123:"' in script
+        assert "return results" in script
+
+    def test_multiple_messages_same_mailbox(self):
+        msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(3)]
+        cls = {m.message_id: _make_classification(message_id=m.message_id) for m in msgs}
+        script, rowids = generate_batch_applescript(msgs, cls)
+        assert rowids == [0, 1, 2]
+        for rid in rowids:
+            assert f"whose id is {rid}" in script
+            assert f'"OK:{rid}"' in script
+
+    def test_groups_by_mailbox(self):
+        msg1 = _make_message(rowid=10, message_id=5010, mailbox_url="imap://UUID/INBOX")
+        msg2 = _make_message(rowid=20, message_id=5020, mailbox_url="imap://UUID/Archive")
+        msg3 = _make_message(rowid=30, message_id=5030, mailbox_url="imap://UUID/INBOX")
+        cls = {m.message_id: _make_classification(message_id=m.message_id) for m in [msg1, msg2, msg3]}
+        script, rowids = generate_batch_applescript([msg1, msg2, msg3], cls)
+        assert set(rowids) == {10, 20, 30}
+        assert 'mailbox "INBOX"' in script
+        assert 'mailbox "Archive"' in script
+
+    def test_skips_protected(self):
+        msg = _make_message(rowid=99, message_id=5099)
+        cls = {5099: _make_classification(message_id=5099, protected=True)}
+        script, rowids = generate_batch_applescript([msg], cls)
+        assert script == ""
+        assert rowids == []
+
+    def test_skips_unclassified(self):
+        msg = _make_message(rowid=99, message_id=5099)
+        script, rowids = generate_batch_applescript([msg], {})
+        assert script == ""
+        assert rowids == []
+
+    def test_no_delete_command(self):
+        msg = _make_message(rowid=1, message_id=5001)
+        cls = {5001: _make_classification(message_id=5001)}
+        script, _ = generate_batch_applescript([msg], cls)
+        lines = [line.strip().lower() for line in script.splitlines()]
+        assert not any(line.startswith("delete ") for line in lines)
+
+
+class TestGenerateBatchRestoreScript:
+    def test_single_entry(self):
+        entry = {
+            "rowid_in_db": 42,
+            "source_mailbox": "imap://UUID/INBOX",
+            "message_id": 5042,
+        }
+        script, rowids = generate_batch_restore_script([entry])
+        assert rowids == [42]
+        assert "whose id is 42" in script
+        assert '"OK:42"' in script
+        assert 'mailbox "INBOX"' in script
+
+    def test_multiple_entries(self):
+        entries = [
+            {"rowid_in_db": 10, "source_mailbox": "imap://UUID/INBOX", "message_id": 5010},
+            {"rowid_in_db": 20, "source_mailbox": "imap://UUID/Archive", "message_id": 5020},
+        ]
+        script, rowids = generate_batch_restore_script(entries)
+        assert set(rowids) == {10, 20}
+        assert 'mailbox "INBOX"' in script
+        assert 'mailbox "Archive"' in script
+
+    def test_plain_mailbox_name(self):
+        entry = {"rowid_in_db": 5, "source_mailbox": "INBOX", "message_id": 5005}
+        script, rowids = generate_batch_restore_script([entry])
+        assert rowids == [5]
+        assert 'mailbox "INBOX" of account "iCloud"' in script
+
+    def test_empty_list(self):
+        script, rowids = generate_batch_restore_script([])
+        assert script == ""
+        assert rowids == []
+
+
+# --- Parse batch results ---
+
+
+class TestParseBatchResults:
+    def test_ok(self):
+        results = _parse_batch_results("OK:123\n")
+        assert results == {123: ("OK", None)}
+
+    def test_miss(self):
+        results = _parse_batch_results("MISS:456\n")
+        assert results == {456: ("MISS", None)}
+
+    def test_err(self):
+        results = _parse_batch_results("ERR:789:something went wrong\n")
+        assert results == {789: ("ERR", "something went wrong")}
+
+    def test_err_with_colons_in_message(self):
+        results = _parse_batch_results("ERR:100:error: timeout: 30s\n")
+        assert results == {100: ("ERR", "error: timeout: 30s")}
+
+    def test_mixed(self):
+        stdout = "OK:1\nMISS:2\nERR:3:bad\nOK:4\n"
+        results = _parse_batch_results(stdout)
+        assert len(results) == 4
+        assert results[1] == ("OK", None)
+        assert results[2] == ("MISS", None)
+        assert results[3] == ("ERR", "bad")
+        assert results[4] == ("OK", None)
+
+    def test_empty(self):
+        assert _parse_batch_results("") == {}
+        assert _parse_batch_results("\n\n") == {}
+
+    def test_trailing_whitespace(self):
+        results = _parse_batch_results("  OK:5  \n  MISS:6  \n")
+        assert results == {5: ("OK", None), 6: ("MISS", None)}
 
 
 # --- Action Log ---
@@ -199,6 +329,24 @@ class TestActionLog:
         assert actions[0]["message_id"] == 5000
         assert actions[0]["action"] == "move_to_trash"
         assert actions[0]["dry_run"] == 1
+
+    def test_log_action_no_commit_defers(self, tmp_path: Path):
+        """log_action_no_commit should not be visible from a separate connection until commit."""
+        db_path = tmp_path / "action_log.db"
+        log = ActionLog(db_path)
+        log.log_action_no_commit(
+            message_id=1, rowid_in_db=1, subject="s", sender_address="a",
+            tier="trash", confidence=0.0, action="move_to_trash",
+            source_mailbox="INBOX", dry_run=True, success=True, error_message=None,
+        )
+        # From the same connection it's visible (SQLite autoread own writes)
+        actions = log.get_actions()
+        assert len(actions) == 1
+
+        # After explicit commit, still visible
+        log.commit()
+        actions = log.get_actions()
+        assert len(actions) == 1
 
     def test_get_actions_filter_by_action(self, tmp_path: Path):
         log = ActionLog(tmp_path / "action_log.db")
@@ -285,27 +433,30 @@ class TestExecuteDeletions:
         assert len(actions) == 1
         assert actions[0]["dry_run"] == 1
 
-    def test_real_execution_calls_subprocess(self, tmp_path: Path):
-        msg = _make_message()
-        cls = _make_classification()
+    def test_real_execution_calls_subprocess_once_per_batch(self, tmp_path: Path):
+        """Real execution should call subprocess once per batch, not once per message."""
+        msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(3)]
+        clss = {m.message_id: _make_classification(message_id=m.message_id) for m in msgs}
         log = ActionLog(tmp_path / "action_log.db")
 
         mock_result = MagicMock()
         mock_result.returncode = 0
+        mock_result.stdout = "OK:0\nOK:1\nOK:2\n"
         mock_result.stderr = ""
 
         with patch("icloud_cleanup.executor.subprocess") as mock_sub:
             mock_sub.run.return_value = mock_result
             result = execute_deletions(
-                messages=[msg],
-                classifications={msg.message_id: cls},
+                messages=msgs,
+                classifications=clss,
                 action_log=log,
                 dry_run=False,
                 batch_size=100,
             )
-            mock_sub.run.assert_called_once()
+            # Single osascript call for the whole batch
+            assert mock_sub.run.call_count == 1
 
-        assert result["success_count"] == 1
+        assert result["success_count"] == 3
         assert result["error_count"] == 0
 
     def test_protected_message_rejected(self, tmp_path: Path):
@@ -337,11 +488,20 @@ class TestExecuteDeletions:
         mock_result.returncode = 0
         mock_result.stderr = ""
 
+        def make_stdout(call_args, **kwargs):
+            # Parse the script to extract rowids from the batch
+            r = MagicMock()
+            r.returncode = 0
+            r.stderr = ""
+            # Just return OK for all possible rowids
+            r.stdout = "\n".join(f"OK:{i}" for i in range(5))
+            return r
+
         with (
             patch("icloud_cleanup.executor.subprocess") as mock_sub,
             patch("icloud_cleanup.executor.time") as mock_time,
         ):
-            mock_sub.run.return_value = mock_result
+            mock_sub.run.side_effect = make_stdout
             result = execute_deletions(
                 messages=msgs,
                 classifications=clss,
@@ -356,31 +516,61 @@ class TestExecuteDeletions:
 
         assert result["success_count"] == 5
 
-    def test_subprocess_error_logged(self, tmp_path: Path):
-        msg = _make_message()
-        cls = _make_classification()
+    def test_batch_osascript_error_per_message(self, tmp_path: Path):
+        """Individual message errors from batch results should be tracked."""
+        msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(3)]
+        clss = {m.message_id: _make_classification(message_id=m.message_id) for m in msgs}
         log = ActionLog(tmp_path / "action_log.db")
 
         mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "AppleScript error"
+        mock_result.returncode = 0
+        mock_result.stdout = "OK:0\nERR:1:AppleScript error\nMISS:2\n"
+        mock_result.stderr = ""
 
         with patch("icloud_cleanup.executor.subprocess") as mock_sub:
             mock_sub.run.return_value = mock_result
             result = execute_deletions(
-                messages=[msg],
-                classifications={msg.message_id: cls},
+                messages=msgs,
+                classifications=clss,
                 action_log=log,
                 dry_run=False,
                 batch_size=100,
             )
 
-        assert result["error_count"] == 1
-        assert len(result["errors"]) == 1
+        assert result["success_count"] == 1
+        assert result["error_count"] == 2
+        assert len(result["errors"]) == 2
 
-        actions = log.get_actions()
-        assert actions[0]["success"] == 0
-        assert actions[0]["error_message"] == "AppleScript error"
+        actions = log.get_actions(limit=10)
+        successes = [a for a in actions if a["success"]]
+        failures = [a for a in actions if not a["success"]]
+        assert len(successes) == 1
+        assert len(failures) == 2
+
+    def test_whole_batch_failure(self, tmp_path: Path):
+        """If osascript returns non-zero with no stdout, all messages fail."""
+        msgs = [_make_message(rowid=i, message_id=5000 + i) for i in range(2)]
+        clss = {m.message_id: _make_classification(message_id=m.message_id) for m in msgs}
+        log = ActionLog(tmp_path / "action_log.db")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        mock_result.stderr = "osascript crashed"
+
+        with patch("icloud_cleanup.executor.subprocess") as mock_sub:
+            mock_sub.run.return_value = mock_result
+            result = execute_deletions(
+                messages=msgs,
+                classifications=clss,
+                action_log=log,
+                dry_run=False,
+                batch_size=100,
+            )
+
+        assert result["success_count"] == 0
+        assert result["error_count"] == 2
+        assert all("osascript crashed" in e for e in result["errors"])
 
 
 # --- Restore from log ---
@@ -413,6 +603,7 @@ class TestRestoreFromLog:
 
         mock_result = MagicMock()
         mock_result.returncode = 0
+        mock_result.stdout = "OK:100\n"
         mock_result.stderr = ""
 
         with patch("icloud_cleanup.executor.subprocess") as mock_sub:
@@ -421,3 +612,30 @@ class TestRestoreFromLog:
             mock_sub.run.assert_called_once()
 
         assert result["success_count"] == 1
+
+    def test_restore_batch_handles_errors(self, tmp_path: Path):
+        log = ActionLog(tmp_path / "action_log.db")
+        log.log_action(
+            message_id=5000, rowid_in_db=100, subject="Test",
+            sender_address="s@e.com", tier="trash", confidence=0.0,
+            action="move_to_trash", source_mailbox="INBOX",
+            dry_run=False, success=True, error_message=None,
+        )
+        log.log_action(
+            message_id=5001, rowid_in_db=101, subject="Test2",
+            sender_address="s@e.com", tier="trash", confidence=0.0,
+            action="move_to_trash", source_mailbox="INBOX",
+            dry_run=False, success=True, error_message=None,
+        )
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "OK:100\nMISS:101\n"
+        mock_result.stderr = ""
+
+        with patch("icloud_cleanup.executor.subprocess") as mock_sub:
+            mock_sub.run.return_value = mock_result
+            result = restore_from_log(log, dry_run=False)
+
+        assert result["success_count"] == 1
+        assert result["error_count"] == 1
