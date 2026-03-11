@@ -90,7 +90,7 @@ class TestUrlToApplescriptMailbox:
         assert result == 'mailbox "Deleted Messages" of account "iCloud"'
 
     def test_nested_folder(self):
-        url = "imap://XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/Events/Ice%20Palace%20Events/DeadMau5"
+        url = "imap://XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/Events/My%20Custom%20Events/DeadMau5"
         result = url_to_applescript_mailbox(url)
         assert result == 'mailbox "Events/My Custom Events/DeadMau5" of account "iCloud"'
 

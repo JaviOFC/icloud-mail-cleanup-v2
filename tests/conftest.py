@@ -6,9 +6,21 @@ import sqlite3
 
 import pytest
 
+import icloud_cleanup.scanner as _scanner
 from tests.helpers import insert_message, insert_recipient  # noqa: F401 — re-export
 
 __all__ = ["insert_message", "insert_recipient"]
+
+TEST_UUID = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+
+
+@pytest.fixture(autouse=True)
+def _set_icloud_uuid():
+    """Set scanner.ICLOUD_UUID for tests, reset after."""
+    old = _scanner.ICLOUD_UUID
+    _scanner.ICLOUD_UUID = TEST_UUID
+    yield
+    _scanner.ICLOUD_UUID = old
 
 
 @pytest.fixture

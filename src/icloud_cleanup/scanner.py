@@ -8,18 +8,44 @@ from pathlib import Path
 from icloud_cleanup.models import Message
 
 ENVELOPE_INDEX = Path.home() / "Library/Mail/V10/MailData/Envelope Index"
-ICLOUD_UUID = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+ICLOUD_UUID: str | None = None  # auto-detected on first DB open
+
+
+def _detect_icloud_uuid(conn: sqlite3.Connection) -> str:
+    """Auto-detect iCloud account UUID from mailboxes table."""
+    row = conn.execute(
+        "SELECT url FROM mailboxes WHERE url LIKE 'imap://%/INBOX' LIMIT 1"
+    ).fetchone()
+    if row:
+        # url format: imap://UUID/INBOX
+        url = row[0] if isinstance(row, (tuple, list)) else row["url"]
+        parts = url.split("/")
+        if len(parts) >= 3:
+            return parts[2]
+    raise RuntimeError(
+        "Could not auto-detect iCloud UUID from mailboxes table. "
+        "Set ICLOUD_MAIL_UUID environment variable."
+    )
 
 
 def open_db(path: Path | None = None) -> sqlite3.Connection:
     """Open the Envelope Index in URI read-only mode.
 
     Uses the default system path if none provided.
+    Auto-detects ICLOUD_UUID on first call.
     """
+    global ICLOUD_UUID
     target = path or ENVELOPE_INDEX
     uri = f"file:{target}?mode=ro"
     conn = sqlite3.connect(uri, uri=True)
     conn.row_factory = sqlite3.Row
+    if ICLOUD_UUID is None:
+        import os
+        env_uuid = os.environ.get("ICLOUD_MAIL_UUID")
+        if env_uuid:
+            ICLOUD_UUID = env_uuid
+        else:
+            ICLOUD_UUID = _detect_icloud_uuid(conn)
     return conn
 
 
